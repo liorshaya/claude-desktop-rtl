@@ -6,7 +6,7 @@ Status keys: TODO / DOING / DONE.
 
 ---
 
-## P0 — Engine core   [TODO]
+## P0 — Engine core   [DONE]
 Branch: `p0-engine`
 Context Required: `ARCHITECTURE.md` §0, §3, §8, §13
 Build:
