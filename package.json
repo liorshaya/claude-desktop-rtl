@@ -1,0 +1,12 @@
+{
+  "name": "claude-desktop-rtl",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Smooth RTL (Hebrew/Arabic/Persian) for Claude Desktop (macOS) + claude.ai, from one pure engine.",
+  "license": "MIT",
+  "type": "commonjs",
+  "scripts": {
+    "test": "node --test engine/__tests__/*.test.js build/__tests__/*.test.js",
+    "build": "node build/build-payload.js"
+  }
+}

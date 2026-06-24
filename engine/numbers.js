@@ -44,5 +44,6 @@ function leadingNumber(str) {
   return m ? m[0] : '';
 }
 
+// __EXPORTS__ (everything below is stripped when inlined into the browser payload)
 const api = { isENDigit, isANDigit, isDigit, digitScript, leadingNumber };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;

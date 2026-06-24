@@ -118,5 +118,6 @@ function tableDir(headers, firstColumn) {
   return majorityOfDirs(firstColumn.map(cellDir));
 }
 
+// __EXPORTS__ (everything below is stripped when inlined into the browser payload)
 const api = { firstStrong, majority, stripLeadingNoise, detectBlockDir, cellDir, tableDir };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;

@@ -62,5 +62,6 @@ function hasRTL(str) {
   return false;
 }
 
+// __EXPORTS__ (everything below is stripped when inlined into the browser payload)
 const api = { isStrongRTL, isStrongLTR, isRTLDigit, hasRTL };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;

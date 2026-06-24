@@ -59,5 +59,6 @@ function segmentMath(text) {
   return out;
 }
 
+// __EXPORTS__ (everything below is stripped when inlined into the browser payload)
 const api = { segmentMath, hasLatexSignal };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
