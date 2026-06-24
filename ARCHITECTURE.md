@@ -566,7 +566,15 @@ in the desktop pipeline.
    `force-ui-direction` switch?
 4. Watcher default: opt-in only, or offer during `--install`?
 5. Signing toolchain: `minisign`/`signify` detached sig vs a full **notarized**
-   installer.
+   installer. (v1 ships ECDSA-P256 via the stock LibreSSL — no external dep.)
+6. **Bundled Hebrew font** (§12) is deferred: no OFL font is vendored yet (zero-network,
+   none on disk), and macOS already renders Hebrew via system fonts. The `@font-face`
+   data: pipeline is the drop-in point when a font is added.
+7. **Artifacts on the desktop**: the browser userscript reaches the artifact iframe
+   (`@match *.claude.ai`, runs in frames), so HTML artifacts get RTL there. The desktop
+   app loads that artifact in a CROSS-ORIGIN `a.claude.ai` iframe our renderer payload
+   can't enter; full desktop-artifact coverage needs a main-process session preload
+   (investigate post-v1 — risk of black-screen). Chat + rendered content are covered.
 6. Naming, and whether to share the corpus/engine improvements with the community
    (`shraga100`/`soguy`) even while building your own.
 
