@@ -1,0 +1,11 @@
+{
+  "name": "claude-rtl-helper",
+  "private": true,
+  "description": "asar+fuses CLI compiled to a standalone Node SEA binary so the .app needs no system Node",
+  "devDependencies": {
+    "@electron/asar": "^3.2.10",
+    "@electron/fuses": "^1.8.0",
+    "esbuild": "^0.21.5",
+    "postject": "^1.0.0-alpha.6"
+  }
+}

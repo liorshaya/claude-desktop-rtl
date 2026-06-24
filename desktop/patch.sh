@@ -16,7 +16,11 @@ DEST_APP="${DEST_APP:-$HOME/Applications/Claude-RTL.app}"
 # are keyed to it, so changing it breaks virtualization (§7). Only CFBundleDisplayName is
 # changed. Launch the patched app by its binary path so LaunchServices can't resolve the
 # shared id back to /Applications/Claude.app.
-PAYLOAD="$REPO_ROOT/dist/payload.js"
+# When bundled in the .app these point at a pre-built payload and the standalone Node SEA
+# helper (asar+fuses), so patching needs NO system Node. In dev they're empty → npx + the
+# node build are used instead.
+PAYLOAD="${CLAUDE_RTL_PAYLOAD:-$REPO_ROOT/dist/payload.js}"
+HELPER="${CLAUDE_RTL_HELPER:-}"
 MARKER="claude-rtl-payload-v1"        # build-payload.js stamps this into the IIFE
 UIDIR_MARKER="claude-rtl-uidir"       # marks the main-entry switch (idempotency)
 # Native code can't be loaded from inside an asar, so these stay unpacked (must match the
@@ -36,6 +40,11 @@ cleanup() { [ -n "$WORK" ] && rm -rf "$WORK"; return 0; }
 trap cleanup EXIT
 
 app_version() { /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$1/Contents/Info.plist" 2>/dev/null || echo "?"; }
+
+# asar/fuses via the bundled standalone helper when present (no Node), else npx.
+asar_extract() { if [ -n "$HELPER" ]; then "$HELPER" extract "$1" "$2"; else npx --yes @electron/asar extract "$1" "$2"; fi; }
+asar_pack()    { if [ -n "$HELPER" ]; then "$HELPER" pack "$1" "$2" "$UNPACK_GLOB"; else npx --yes @electron/asar pack "$1" "$2" --unpack "$UNPACK_GLOB"; fi; }
+fuses_off()    { if [ -n "$HELPER" ]; then "$HELPER" fuses "$1" EnableEmbeddedAsarIntegrityValidation=off; else npx --yes @electron/fuses write --app "$1" EnableEmbeddedAsarIntegrityValidation=off >/dev/null; fi; }
 
 cmd_status() {
   if [ -d "$ORIG_APP" ]; then echo "original : $ORIG_APP (v$(app_version "$ORIG_APP")) — untouched"; else echo "original : MISSING ($ORIG_APP)"; fi
@@ -85,9 +94,13 @@ cmd_install() {
 
   bash "$SCRIPT_DIR/preflight.sh"
 
-  log "building payload…"
-  ( cd "$REPO_ROOT" && node build/build-payload.js >/dev/null )
-  [ -f "$PAYLOAD" ] || die "payload not built at $PAYLOAD."
+  if [ -n "${CLAUDE_RTL_PAYLOAD:-}" ]; then
+    log "using bundled payload ($PAYLOAD)…"
+  else
+    log "building payload…"
+    ( cd "$REPO_ROOT" && node build/build-payload.js >/dev/null )
+  fi
+  [ -f "$PAYLOAD" ] || die "payload not found at $PAYLOAD."
   grep -q "$MARKER" "$PAYLOAD" || die "payload missing marker $MARKER — build looks wrong."
 
   log "copying $ORIG_APP → $DEST_APP (original is never modified)…"
@@ -102,13 +115,16 @@ cmd_install() {
   WORK="$(mktemp -d)"
 
   log "extracting app.asar…"
-  npx --yes @electron/asar extract "$ASAR" "$WORK/app"
+  asar_extract "$ASAR" "$WORK/app"
 
   # --- Verify layout before changing anything (§11: die loudly, not silently) ---
   local VITE="$WORK/app/.vite/build"
   [ -d "$VITE" ] || die "expected .vite/build missing — Claude's layout changed; aborting."
   local MAIN_REL MAIN
-  MAIN_REL="$(node -p "require('$WORK/app/package.json').main" 2>/dev/null)" || die "cannot read \"main\" from package.json."
+  # Read package.json "main" without Node — plutil reads JSON; grep is the fallback.
+  MAIN_REL="$(plutil -extract main raw -o - "$WORK/app/package.json" 2>/dev/null \
+    || grep -oE '"main"[[:space:]]*:[[:space:]]*"[^"]*"' "$WORK/app/package.json" | sed -E 's/.*"([^"]*)"$/\1/')"
+  [ -n "$MAIN_REL" ] || die "cannot read \"main\" from package.json."
   MAIN="$WORK/app/$MAIN_REL"
   [ -f "$MAIN" ] || die "main entry $MAIN_REL missing — aborting."
 
@@ -135,7 +151,7 @@ cmd_install() {
   # --- Repack (keep native binaries unpacked) ---
   log "repacking app.asar…"
   rm -f "$ASAR"
-  npx --yes @electron/asar pack "$WORK/app" "$ASAR" --unpack "$UNPACK_GLOB"
+  asar_pack "$WORK/app" "$ASAR"
 
   # Safety net: every file the original kept unpacked must still be unpacked.
   if [ -d "$ORIG_UNPACKED" ]; then
@@ -147,7 +163,7 @@ cmd_install() {
 
   # --- Flip the asar-integrity fuse (our asar differs from the signed manifest) ---
   log "writing fuses (EnableEmbeddedAsarIntegrityValidation=off)…"
-  npx --yes @electron/fuses write --app "$DEST_APP" EnableEmbeddedAsarIntegrityValidation=off >/dev/null
+  fuses_off "$DEST_APP"
 
   # --- Ad-hoc re-sign, PRESERVING entitlements minus the team-id-coupled keys ---
   log "re-signing (ad-hoc, preserving entitlements)…"

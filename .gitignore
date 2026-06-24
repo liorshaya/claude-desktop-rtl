@@ -8,3 +8,9 @@ desktop/trust/MANIFEST.sha256
 desktop/trust/MANIFEST.sha256.sig
 gui/.build/
 gui/dist/
+helper/node_modules/
+helper/package-lock.json
+helper/sea-cli.bundle.js
+helper/sea-prep.blob
+helper/sea-config.json
+helper/claude-rtl-helper
