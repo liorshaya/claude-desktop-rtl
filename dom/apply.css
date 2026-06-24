@@ -102,3 +102,13 @@ blockquote[dir="rtl"] {
   margin-left: 0 !important;
   margin-right: 0.5rem !important;
 }
+
+/* Same physical-property issue for NESTED lists: Claude indents them with padding-left
+ * (pl-8 = 2rem) which dir="rtl" can't flip, so deeper RTL levels don't step inward from
+ * the right. Move that indent to the right. Only nested RTL lists; top-level + LTR keep
+ * Claude's spacing. */
+:where(.prose, .standard-markdown, .font-claude-response, .font-claude-message, [data-testid="user-message"], [data-rtl-artifact])
+  :is(ul, ol) :is(ul, ol)[dir="rtl"] {
+  padding-left: 0 !important;
+  padding-right: 2rem !important;
+}
