@@ -23,6 +23,12 @@ UIDIR_MARKER="claude-rtl-uidir"       # marks the main-entry switch (idempotency
 # original set: *.node, *.dylib, spawn-helper). Verified against the copy after packing.
 UNPACK_GLOB="{**/*.node,**/*.dylib,**/spawn-helper}"
 
+# Auto-reapply watcher (§10).
+WATCH_LABEL="com.claude-rtl.watcher"
+WATCH_PLIST_SRC="$SCRIPT_DIR/agent.plist"
+WATCH_PLIST_DST="$HOME/Library/LaunchAgents/$WATCH_LABEL.plist"
+WATCH_LOG="$HOME/Library/Logs/claude-rtl-watch.log"
+
 WORK=""
 die() { echo "patch: ERROR — $*" >&2; exit 1; }
 log() { echo "patch: $*"; }
@@ -34,12 +40,31 @@ app_version() { /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "
 cmd_status() {
   if [ -d "$ORIG_APP" ]; then echo "original : $ORIG_APP (v$(app_version "$ORIG_APP")) — untouched"; else echo "original : MISSING ($ORIG_APP)"; fi
   if [ -d "$DEST_APP" ]; then echo "patched  : $DEST_APP (v$(app_version "$DEST_APP")) — installed"; else echo "patched  : not installed"; fi
+  if launchctl print "gui/$(id -u)/$WATCH_LABEL" >/dev/null 2>&1; then echo "watcher  : active (re-patches on Claude update)"; else echo "watcher  : not active"; fi
 }
 
 cmd_uninstall() {
   [ -d "$DEST_APP" ] || { log "nothing to remove ($DEST_APP)"; return; }
   rm -rf "$DEST_APP"
   log "removed $DEST_APP (original untouched)."
+}
+
+# --- Auto-reapply watcher (§10): a user LaunchAgent that re-patches after a Claude update ---
+cmd_watch() {
+  [ -f "$WATCH_PLIST_SRC" ] || die "agent.plist template not found at $WATCH_PLIST_SRC."
+  [ -f "$SCRIPT_DIR/watch.sh" ] || die "watch.sh not found at $SCRIPT_DIR/watch.sh."
+  mkdir -p "$HOME/Library/LaunchAgents" "$HOME/Library/Logs"
+  sed -e "s#__WATCH_SH__#$SCRIPT_DIR/watch.sh#g" -e "s#__LOG__#$WATCH_LOG#g" \
+    "$WATCH_PLIST_SRC" > "$WATCH_PLIST_DST"
+  launchctl bootout "gui/$(id -u)/$WATCH_LABEL" 2>/dev/null || true   # reload if already loaded
+  launchctl bootstrap "gui/$(id -u)" "$WATCH_PLIST_DST" || die "launchctl bootstrap failed."
+  log "watcher installed → $WATCH_PLIST_DST"
+  log "it re-applies the RTL patch whenever Claude updates. Logs: $WATCH_LOG"
+}
+
+cmd_unwatch() {
+  launchctl bootout "gui/$(id -u)/$WATCH_LABEL" 2>/dev/null || true
+  if [ -f "$WATCH_PLIST_DST" ]; then rm -f "$WATCH_PLIST_DST"; log "watcher removed."; else log "watcher was not installed."; fi
 }
 
 cmd_install() {
@@ -129,6 +154,8 @@ case "${1:---install}" in
   --install)   cmd_install ;;
   --uninstall) cmd_uninstall ;;
   --status)    cmd_status ;;
-  -h|--help)   echo "usage: $0 [--install] | --uninstall | --status" ;;
-  *)           die "unknown flag '$1' (use --install | --uninstall | --status)" ;;
+  --watch)     cmd_watch ;;
+  --unwatch)   cmd_unwatch ;;
+  -h|--help)   echo "usage: $0 [--install] | --uninstall | --status | --watch | --unwatch" ;;
+  *)           die "unknown flag '$1' (use --install | --uninstall | --status | --watch | --unwatch)" ;;
 esac
