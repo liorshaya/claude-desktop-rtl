@@ -22,7 +22,7 @@ Done when:
 - `detectBlockDir` fallback is `null` (never `'rtl'`); the §8.K mixed-doc case passes.
 - No `document` / `window` reference anywhere in `engine/`.
 
-## P1 — CSS + DOM layer (browser first)   [TODO]
+## P1 — CSS + DOM layer (browser first)   [DONE]
 Branch: `p1-dom`
 Context Required: `ARCHITECTURE.md` §3.3, §3.6, §4, §5, §6 + `engine/`
 Build:
