@@ -33,7 +33,7 @@ Done when:
 - Userscript loaded on claude.ai: visual corpus passes, NO global flip, no flicker,
   copy/Ctrl-F fidelity intact, and the edit-message box gets `dir="auto"`.
 
-## P2 — Desktop pipeline   [TODO]
+## P2 — Desktop pipeline   [DONE]
 Branch: `p2-desktop`
 Context Required: `ARCHITECTURE.md` §7, §9 + `build/`
 Build:
