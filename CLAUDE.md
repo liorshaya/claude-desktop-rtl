@@ -8,7 +8,9 @@ the single source of truth.** Section refs (§) point to it.
 - `engine/` is PURE and DOM-free (no document/window). Must stay unit-testable.
 - CSS `unicode-bidi: plaintext` per leaf block is the SOLE base-direction mechanism
   for prose. JS NEVER sets `dir` on a prose block or a container — only on `<table>`
-  (column flip) and on input boxes / JS-created islands. (§3.2, §8.K)
+  (column flip), on input boxes / JS-created islands, and on DECORATED blocks
+  (`<ul>/<ol>/<li>` markers, `<blockquote>` bar) where the decoration must sit on the
+  content side — via content-derived `detectBlockDir` (§6; self-determining, §8.K holds). (§3.2, §8.K)
 - Direction-detection fallback is `null`, never a forced `'rtl'`. (§3.2)
 - NEVER inject U+200E/200F or any bidi control char — copy/paste & Ctrl-F must return
   Claude's text byte-for-byte. (§3.6, §8.J)
