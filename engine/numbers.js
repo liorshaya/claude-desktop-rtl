@@ -36,8 +36,10 @@ function digitScript(str) {
 // with locale separators, optional trailing %/° or currency. Returns '' if none.
 // Note: a version-like token ("v4.6") is NOT number-led — it is a dotted technical
 // token, handled separately by detect.stripLeadingNoise.
+// Separators include '-' (kept last in the class = literal) so dates/phones/versions like
+// 2024-01-15 or 03-1234567 peel as ONE token, not several.
 const LEADING_NUMBER =
-  /^[$₪€£¥]?[-+±]?[0-9٠-٩۰-۹]+(?:[.,_:/][0-9٠-٩۰-۹]+)*[%°]?[$₪€£¥]?/;
+  /^[$₪€£¥]?[-+±]?[0-9٠-٩۰-۹]+(?:[.,_:/-][0-9٠-٩۰-۹]+)*[%°]?[$₪€£¥]?/;
 
 function leadingNumber(str) {
   const m = str.match(LEADING_NUMBER);
