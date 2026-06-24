@@ -1,0 +1,53 @@
+/* dom/apply.css — the declarative bulk of the RTL fix (§4).
+ * Apply at the LEAF-BLOCK level: unicode-bidi does NOT inherit, so each rule must sit
+ * on the actual <p>/<li>/<td>/… , never on a container. This per-leaf `plaintext` is
+ * the SOLE base-direction mechanism for prose (§3.2, §8.K) — no JS ever sets dir on a
+ * prose block, so a mixed English/Hebrew document renders block-by-block with NO
+ * global flip. :where() keeps specificity at 0 so Claude's own styles win ties unless
+ * we deliberately override. */
+
+/* Per-paragraph base direction via the browser's own UBA first-strong, logical align. */
+:where(.prose) p,
+:where(.prose) li,
+:where(.prose) h1, :where(.prose) h2, :where(.prose) h3,
+:where(.prose) h4, :where(.prose) h5, :where(.prose) h6,
+:where(.prose) blockquote,
+:where(.prose) td, :where(.prose) th,
+:where(.prose) dt, :where(.prose) dd,
+:where(.prose) figcaption, :where(.prose) caption {
+  unicode-bidi: plaintext;
+  text-align: start;
+}
+
+/* Code & math NEVER reorder; isolate so neighbouring neutrals can't bleed in. */
+pre,
+.code-block__code {
+  direction: ltr;
+  unicode-bidi: isolate;
+  text-align: left;
+}
+code {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+.katex, .katex-display, mjx-container, math {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+/* Islands wrapped by JS (§3.6) isolate like UBA isolates; nesting works. */
+[data-rtl-island] {
+  unicode-bidi: isolate;
+}
+
+/* Explicit dir attributes win; tables flip column order (the only dir JS writes on
+ * block content, §3.2). */
+[dir="rtl"] { direction: rtl; }
+[dir="ltr"] { direction: ltr; }
+table[dir="rtl"] { direction: rtl; }
+
+/* Long unbreakable LTR tokens (URLs) inside RTL must not blow out the bubble. */
+:where(.prose) p,
+:where(.prose) li {
+  overflow-wrap: anywhere;
+}
