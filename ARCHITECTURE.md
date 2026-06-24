@@ -159,10 +159,11 @@ exists to *drive table/island/streaming-settle decisions*, not to stamp every pa
 - **Table cell** (`cellDir`): a cell is RTL if it *contains any* RTL char (header
   labels like "ID"/"blob" often start Latin yet belong to a Hebrew column). Neutral
   cells (digits/punct only) → `null`.
-- **Table column** (`tableDir`): the first header is the semantic key; if it's RTL
-  and the first data cell agrees → RTL table, regardless of how many LTR product
-  names appear in later headers. Else majority of headers; else majority of first
-  column.
+- **Table column** (`tableDir`): the **first column holds the row keys** — what a
+  reader scans by — so if its *data* is RTL-majority the table reads RTL regardless of
+  English header labels (majority, not "any one cell", so a stray cell can't flip it).
+  Else majority of the header row (e.g. Hebrew headers over English data); else the
+  first-column direction (ltr / neutral-only → `null`).
 
 ### 3.3 Streaming-settle (anti-flicker) — *beyond existing tools*
 During streaming a paragraph may start `"In React…"` (first-strong LTR) and end up
@@ -352,7 +353,11 @@ For each: the failure, and our handling. "Smooth" means these all Just Work.
 
 ### D. Code & technical strings
 - Code block with **Hebrew comments/strings** → block stays LTR (simplest, safe);
-  *do not* try to RTL inner comments in v1 (rabbit hole; document the tradeoff).
+  *do not* try to RTL inner comments in v1 (rabbit hole; document the tradeoff). **But**
+  a fence Claude mis-used for a Hebrew "table"/prose (no code structure) reads RTL:
+  `engine/code.js` `codeBlockIsProse` = `hasRTL && !looksLikeCode` (conservative — any
+  brace/keyword/indent/call/operator/tag → treated as code), and the DOM tags such a
+  block `data-rtl-text` for a per-line `plaintext` CSS rule. Real code is never touched.
 - Inline `code` with Hebrew; **file paths** with Hebrew folders (`/Users/דני/`);
   **URLs** with Hebrew or percent-encoding inside RTL prose → isolate the code/link
   element so delimiters (`/ . : @ [ ]`) don't scramble.
@@ -373,8 +378,12 @@ For each: the failure, and our handling. "Smooth" means these all Just Work.
   (regional-indicator pairs) → treat as neutral for base-direction; never split a
   grapheme cluster; ensure stripping leading emoji doesn't consume a following strong
   char's cluster.
-- Arrows/brackets that **mirror** in RTL (`()[]{}<>→←`) → leave to UBA mirroring;
-  don't fight it. Canonical bracket pairs (UAX#9 BD16) resolve together.
+- Brackets that **mirror** in RTL (`()[]{}<>`) → leave to UBA mirroring; don't fight it.
+  Canonical bracket pairs (UAX#9 BD16) resolve together.
+- **Arrows** (`→ ← ⇒ ⟶ ➜ …`) are NOT bidi-mirrored by UBA, so they point the wrong way
+  in RTL. `engine/arrows.js` `isMirrorArrow` classifies them; inside an RTL block the DOM
+  wraps each in `<span data-rtl-arrow>` and CSS flips it with `transform: scaleX(-1)` —
+  **visual only**, the code point is untouched so copy/Ctrl-F stay byte-for-byte (§3.6).
 
 ### G. Markdown structures
 - Nested blockquotes with per-level direction; task lists (`- [ ] משימה`); definition
@@ -547,8 +556,10 @@ in the desktop pipeline.
 ---
 
 ## 15. Known limits & open questions
-1. Hebrew/Arabic **inside code blocks** stays LTR in v1 (deliberate). Revisit only if
-   users ask.
+1. **Real** code blocks stay LTR in v1 (deliberate — RTL scrambles syntax). A fence that
+   is actually Hebrew prose/"table" now reads RTL (§8.D), but space-aligned monospace
+   "tables" inside a fence still align imperfectly under RTL — Claude using a real
+   markdown table is the clean path. Arrow glyphs render mirrored but the byte is kept.
 2. How much **bare-island wrapping** (§3.6 step 2) the corpus truly needs before it's
    worth the mutation cost.
 3. UI **mirroring**: stay content-only, or ever mirror chrome beyond the
