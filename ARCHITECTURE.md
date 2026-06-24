@@ -159,11 +159,13 @@ exists to *drive table/island/streaming-settle decisions*, not to stamp every pa
 - **Table cell** (`cellDir`): a cell is RTL if it *contains any* RTL char (header
   labels like "ID"/"blob" often start Latin yet belong to a Hebrew column). Neutral
   cells (digits/punct only) → `null`.
-- **Table column** (`tableDir`): the **first column holds the row keys** — what a
-  reader scans by — so if its *data* is RTL-majority the table reads RTL regardless of
-  English header labels (majority, not "any one cell", so a stray cell can't flip it).
-  Else majority of the header row (e.g. Hebrew headers over English data); else the
-  first-column direction (ltr / neutral-only → `null`).
+- **Table column** (`tableDir`): the **header row defines the table's orientation** —
+  per-cell `plaintext` already right-aligns Hebrew cells, so only the column *order* is
+  in question, and that follows the header. `header[0]` (the semantic-key column's label)
+  decides: Hebrew → RTL, English → LTR. If `header[0]` is neutral (a number), the
+  header-row majority; only a table with no header signal at all falls back to the
+  first-column data. *(An English-headed table stays LTR even with Hebrew data — the
+  cells still align right individually.)*
 
 ### 3.3 Streaming-settle (anti-flicker) — *beyond existing tools*
 During streaming a paragraph may start `"In React…"` (first-strong LTR) and end up

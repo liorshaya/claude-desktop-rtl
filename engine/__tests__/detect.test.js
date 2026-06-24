@@ -98,18 +98,20 @@ test('cellDir', () => {
   assert.equal(cellDir(''), null);
 });
 
-test('tableDir: first-column data first, then header majority, then column direction', () => {
-  // Hebrew row-labels + English column headers => RTL table
+test('tableDir: the header row decides — header[0], then header majority, then data', () => {
+  // Hebrew key-column header => RTL table
   assert.equal(tableDir(['שם', 'ID', 'Status'], ['דני', 'רותי']), 'rtl');
-  // English headers but Hebrew row-key DATA => RTL (the reader scans the key column)
-  assert.equal(tableDir(['Name', 'Age', 'City'], ['ליאור', 'נהוראי', 'יקיר', 'לידור']), 'rtl');
-  // A single stray Hebrew cell must NOT flip an otherwise-English key column
-  assert.equal(tableDir(['Name', 'Age'], ['Alice', 'דני', 'Bob', 'Carol']), 'ltr');
-  // Plain English table
+  assert.equal(tableDir(['תיאור', 'סטטוס'], ['פעיל', 'סגור']), 'rtl');
+  // English headers => LTR table even when the DATA is Hebrew (cells still align right
+  // per-cell; only the column order follows the header). This is the header-based policy.
+  assert.equal(tableDir(['Name', 'Age', 'City'], ['ליאור', 'נהוראי', 'יקיר']), 'ltr');
   assert.equal(tableDir(['Name', 'Age'], ['Alice', 'Bob']), 'ltr');
-  // Neutral first column, but header majority RTL
-  assert.equal(tableDir(['Type', 'שם', 'תיאור'], ['x']), 'rtl');
-  // all neutral
+  // header[0] is the semantic key: English key column wins over later Hebrew headers.
+  assert.equal(tableDir(['Type', 'שם', 'תיאור'], ['x']), 'ltr');
+  // header[0] neutral (a number) → fall back to header-row majority.
+  assert.equal(tableDir(['#', 'שם', 'תיאור'], ['1']), 'rtl');
+  // No header signal at all → fall back to the first-column data.
+  assert.equal(tableDir(['123', '456'], ['דני', 'רותי']), 'rtl');
   assert.equal(tableDir(['123', '456'], ['789']), null);
 });
 
