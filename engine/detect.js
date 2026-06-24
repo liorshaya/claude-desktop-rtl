@@ -104,18 +104,19 @@ function majorityOfDirs(dirs) {
   return null;
 }
 
-// Table column direction (§3.2): header[0] is the semantic key — if it and the first
-// data cell are RTL, the table is RTL regardless of LTR product-name headers; else
-// header majority; else first-column majority; else null.
+// Table column direction (§3.2): the first column holds the row keys — what a reader
+// scans by — so if its DATA is RTL-majority the table reads RTL regardless of English
+// header labels (majority, not "any one cell", so a stray cell can't flip it). Else the
+// header row decides (e.g. Hebrew headers over English data); else the first-column
+// direction (covers ltr / neutral-only → null).
 function tableDir(headers, firstColumn) {
   headers = headers || [];
   firstColumn = firstColumn || [];
-  const h0 = cellDir(headers[0] || '');
-  const d0 = cellDir(firstColumn[0] || '');
-  if (h0 === 'rtl' && d0 === 'rtl') return 'rtl';
-  const hm = majorityOfDirs(headers.map(cellDir));
-  if (hm) return hm;
-  return majorityOfDirs(firstColumn.map(cellDir));
+  const firstColData = majorityOfDirs(firstColumn.map(cellDir));
+  if (firstColData === 'rtl') return 'rtl';
+  const headerMaj = majorityOfDirs(headers.map(cellDir));
+  if (headerMaj) return headerMaj;
+  return firstColData;
 }
 
 // __EXPORTS__ (everything below is stripped when inlined into the browser payload)

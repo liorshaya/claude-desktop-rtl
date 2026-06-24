@@ -98,12 +98,16 @@ test('cellDir', () => {
   assert.equal(cellDir(''), null);
 });
 
-test('tableDir: semantic-key first, then header majority, then column majority', () => {
+test('tableDir: first-column data first, then header majority, then column direction', () => {
   // Hebrew row-labels + English column headers => RTL table
   assert.equal(tableDir(['שם', 'ID', 'Status'], ['דני', 'רותי']), 'rtl');
+  // English headers but Hebrew row-key DATA => RTL (the reader scans the key column)
+  assert.equal(tableDir(['Name', 'Age', 'City'], ['ליאור', 'נהוראי', 'יקיר', 'לידור']), 'rtl');
+  // A single stray Hebrew cell must NOT flip an otherwise-English key column
+  assert.equal(tableDir(['Name', 'Age'], ['Alice', 'דני', 'Bob', 'Carol']), 'ltr');
   // Plain English table
   assert.equal(tableDir(['Name', 'Age'], ['Alice', 'Bob']), 'ltr');
-  // header[0] LTR but header majority RTL
+  // Neutral first column, but header majority RTL
   assert.equal(tableDir(['Type', 'שם', 'תיאור'], ['x']), 'rtl');
   // all neutral
   assert.equal(tableDir(['123', '456'], ['789']), null);

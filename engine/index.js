@@ -7,6 +7,8 @@ const ranges = require('./ranges.js');
 const numbers = require('./numbers.js');
 const detect = require('./detect.js');
 const math = require('./math.js');
+const arrows = require('./arrows.js');
+const code = require('./code.js');
 
 const api = {
   // §3.1 classification
@@ -29,6 +31,12 @@ const api = {
   tableDir: detect.tableDir,
   // §3.5 math vs currency
   segmentMath: math.segmentMath,
+  // §8.F arrow mirroring
+  isMirrorArrow: arrows.isMirrorArrow,
+  hasMirrorArrow: arrows.hasMirrorArrow,
+  // §8.D code-fence-vs-prose
+  looksLikeCode: code.looksLikeCode,
+  codeBlockIsProse: code.codeBlockIsProse,
 };
 
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
