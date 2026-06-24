@@ -12,6 +12,10 @@ REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 
 ORIG_APP="${ORIG_APP:-/Applications/Claude.app}"
 DEST_APP="${DEST_APP:-$HOME/Applications/Claude-RTL.app}"
+# Keep the ORIGINAL CFBundleIdentifier untouched: Cowork's VM/workspace and entitlements
+# are keyed to it, so changing it breaks virtualization (§7). Only CFBundleDisplayName is
+# changed. Launch the patched app by its binary path so LaunchServices can't resolve the
+# shared id back to /Applications/Claude.app.
 PAYLOAD="$REPO_ROOT/dist/payload.js"
 MARKER="claude-rtl-payload-v1"        # build-payload.js stamps this into the IIFE
 UIDIR_MARKER="claude-rtl-uidir"       # marks the main-entry switch (idempotency)
