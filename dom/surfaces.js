@@ -8,15 +8,24 @@
 // data-attributes that have been stable across versions. Tune here during the browser
 // pass if a surface is missed.
 const SELECTORS = {
-  // Streamed-response roots: where prose blocks live. We attach the observer per-root.
-  messageRoot: '.prose, [data-message-author-role], [data-testid="message-content"]',
-  // The chat input (contenteditable) and the message-EDIT box (textarea, often missed).
+  // Streamed-response roots: where prose blocks live (claude.ai, verified DOM). We attach
+  // the observer per-root. `.prose` kept as a fallback for other Claude surfaces/versions.
+  messageRoot:
+    '.standard-markdown, .font-claude-response, .font-claude-message, [data-testid="user-message"], .prose',
+  // The chat input (ProseMirror contenteditable) and the message-EDIT box. Editing reuses
+  // a contenteditable, so the composer selector covers it; textarea kept for safety.
   composer: '[contenteditable="true"], div.ProseMirror[contenteditable]',
   editBox: 'textarea',
   // Inline islands the browser/CSS already isolates; listed for completeness/JS passes.
   code: 'pre, code, .code-block__code',
   math: '.katex, .katex-display, mjx-container, math',
   table: 'table',
+  // Fenced blocks we test for "is this really code, or mis-fenced RTL text?" (§8.D).
+  codeBlock: 'pre',
+  // Leaf prose blocks the arrow-mirroring pass walks (only RTL ones get wrapped, §8.F).
+  // Includes prose-code blocks once they've been tagged data-rtl-text.
+  leafBlock:
+    'p, li, h1, h2, h3, h4, h5, h6, blockquote, dt, dd, figcaption, caption, td, th, pre[data-rtl-text]',
 };
 
 function qsa(selector, root) {
@@ -37,6 +46,14 @@ function findTables(root) {
   return qsa(SELECTORS.table, root);
 }
 
+function findCodeBlocks(root) {
+  return qsa(SELECTORS.codeBlock, root);
+}
+
+function findLeafBlocks(root) {
+  return qsa(SELECTORS.leafBlock, root);
+}
+
 // Read a <table>'s header cells and the first data column as plain text — the input
 // to engine.tableDir (§3.2). Returns { headers, firstColumn }.
 function readTableShape(table) {
@@ -54,5 +71,8 @@ function readTableShape(table) {
 }
 
 // __EXPORTS__ (everything below is stripped when inlined into the browser payload)
-const api = { SELECTORS, qsa, findInputs, findMessageRoots, findTables, readTableShape };
+const api = {
+  SELECTORS, qsa, findInputs, findMessageRoots, findTables, findCodeBlocks,
+  findLeafBlocks, readTableShape,
+};
 if (typeof module !== 'undefined' && module.exports) module.exports = api;

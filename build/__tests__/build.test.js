@@ -23,7 +23,8 @@ test('node-only artifacts are stripped', () => {
 });
 
 test('engine + dom are inlined', () => {
-  for (const sym of ['detectBlockDir', 'tableDir', 'segmentMath', 'findInputs', 'init']) {
+  for (const sym of ['detectBlockDir', 'tableDir', 'segmentMath', 'findInputs', 'init',
+    'codeBlockIsProse', 'isMirrorArrow', 'wrapArrowsInBlock']) {
     assert.ok(payload.includes(sym), `inlined: ${sym}`);
   }
 });

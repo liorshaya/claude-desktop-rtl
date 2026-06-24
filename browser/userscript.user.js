@@ -6,7 +6,7 @@
 // @author       Lior Shaya
 // @match        https://claude.ai/*
 // @run-at       document-start
-// @grant        none
+// @grant        GM_addStyle
 // @noframes
 // ==/UserScript==
 //

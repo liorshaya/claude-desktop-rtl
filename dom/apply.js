@@ -17,11 +17,21 @@ const APPLY_CSS = '__APPLY_CSS__';
 // case CSS isolation can't reach. Code/links/math are already isolated by apply.css.
 const ENABLE_ISLANDS = false;
 
+// Browser bring-up diagnostics — off by default; flip on when adopting a new Claude UI.
+const DEBUG = false;
+function dlog() {
+  if (DEBUG && typeof console !== 'undefined') console.info.apply(console, ['[claude-rtl]'].concat([].slice.call(arguments)));
+}
+dlog('payload evaluated; document =', typeof document);
+
 const SETTLE_MS = 250; // §3.3: run the heavy pass only after the stream goes quiet.
 const MAX_NODES_PER_PASS = 400; // backstop so a giant transcript can't lock the thread.
 const DONE_ATTR = 'data-rtl-done';
 
 function injectCSS(doc) {
+  // In a userscript on a strict-CSP site (claude.ai), GM_addStyle is the CSP-safe path;
+  // typeof-guarded so the Electron renderer (no GM) falls back to a plain <style>.
+  if (typeof GM_addStyle === 'function') { GM_addStyle(APPLY_CSS); return; }
   if (doc.getElementById('claude-rtl-style')) return;
   const style = doc.createElement('style');
   style.id = 'claude-rtl-style';
@@ -40,6 +50,18 @@ function sweepInputs(root) {
   for (let i = 0; i < inputs.length; i++) setInputDir(inputs[i]);
 }
 
+// Apply dir="auto" to a freshly-added node and any inputs inside it. Called synchronously
+// from the observer so an edit box is dir="auto" BEFORE its first paint — no visible
+// LTR→RTL flip. dir="auto" is live, so even a box that mounts empty then fills with
+// Hebrew resolves RTL on its own with no second pass.
+function applyInputDir(node) {
+  if (!node || node.nodeType !== 1) return;
+  if (node.matches && (node.matches(SELECTORS.composer) || node.matches(SELECTORS.editBox))) {
+    setInputDir(node);
+  }
+  sweepInputs(node);
+}
+
 // Flip a table's column order when the engine says the table is RTL (§3.2). This is the
 // only dir attribute JS writes on rendered content. Idempotent via DONE_ATTR.
 function processTable(table) {
@@ -49,10 +71,65 @@ function processTable(table) {
   table.setAttribute(DONE_ATTR, '1');
 }
 
+// §8.D — a fenced block that is really RTL prose (Claude mis-used ``` for a Hebrew
+// "table"/text) gets tagged so the CSS renders it RTL per line. REAL code is left LTR
+// untouched — the engine's codeBlockIsProse is conservative (any code structure → code).
+function processCodeBlock(pre) {
+  if (pre.getAttribute(DONE_ATTR)) return;
+  if (codeBlockIsProse(pre.textContent || '')) pre.setAttribute('data-rtl-text', '');
+  pre.setAttribute(DONE_ATTR, '1');
+}
+
+// §8.F — visually mirror arrows inside RTL blocks by wrapping each in <span
+// data-rtl-arrow>; CSS does the flip. The character is preserved exactly, so copy/Ctrl-F
+// are byte-for-byte (§3.6 hard rule). Only RTL blocks are touched, and each block is
+// stamped so re-runs are O(new blocks).
+const ARROWS_ATTR = 'data-rtl-arrows';
+function wrapArrowsInBlock(block) {
+  if (block.getAttribute(ARROWS_ATTR) === '1') return;
+  block.setAttribute(ARROWS_ATTR, '1');
+  if (!hasMirrorArrow(block.textContent || '')) return;
+  if (detectBlockDir(block.textContent || '') !== 'rtl') return; // mirror only in RTL blocks
+  const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT, {
+    acceptNode: (n) => {
+      if (!n.nodeValue || !hasMirrorArrow(n.nodeValue)) return NodeFilter.FILTER_REJECT;
+      const p = n.parentNode;
+      if (p && p.hasAttribute && p.hasAttribute('data-rtl-arrow')) return NodeFilter.FILTER_REJECT;
+      return NodeFilter.FILTER_ACCEPT;
+    },
+  });
+  const targets = [];
+  let n;
+  while ((n = walker.nextNode())) targets.push(n);
+  for (let i = 0; i < targets.length; i++) splitArrows(targets[i]);
+}
+
+function splitArrows(node) {
+  const frag = document.createDocumentFragment();
+  let buf = '';
+  for (const ch of node.nodeValue) {
+    if (isMirrorArrow(ch.codePointAt(0))) {
+      if (buf) { frag.appendChild(document.createTextNode(buf)); buf = ''; }
+      const span = document.createElement('span');
+      span.setAttribute('data-rtl-arrow', '');
+      span.textContent = ch; // exact glyph preserved — CSS flips it visually only
+      frag.appendChild(span);
+    } else {
+      buf += ch;
+    }
+  }
+  if (buf) frag.appendChild(document.createTextNode(buf));
+  if (node.parentNode) node.parentNode.replaceChild(frag, node);
+}
+
 function processRoot(root) {
   if (!root) return;
   const tables = findTables(root);
   for (let i = 0; i < tables.length && i < MAX_NODES_PER_PASS; i++) processTable(tables[i]);
+  const codeBlocks = findCodeBlocks(root);
+  for (let i = 0; i < codeBlocks.length && i < MAX_NODES_PER_PASS; i++) processCodeBlock(codeBlocks[i]);
+  const leaves = findLeafBlocks(root);
+  for (let i = 0; i < leaves.length && i < MAX_NODES_PER_PASS; i++) wrapArrowsInBlock(leaves[i]);
   if (ENABLE_ISLANDS) wrapBareIslands(root); // eslint-disable-line no-use-before-define
   sweepInputs(root);
 }
@@ -82,6 +159,9 @@ function makeObserver(doc) {
 
   const observer = new MutationObserver((mutations) => {
     for (const m of mutations) {
+      // Inputs are handled SYNCHRONOUSLY (no debounce) so a freshly-opened edit box is
+      // dir="auto" before its first paint — the table/island pass stays deferred.
+      for (let i = 0; i < m.addedNodes.length; i++) applyInputDir(m.addedNodes[i]);
       const target = m.target && m.target.nodeType === 1 ? m.target : doc.body;
       // Scope work to the nearest message root when we can; else the target subtree.
       const root = (target.closest && target.closest(SELECTORS.messageRoot)) || target;
@@ -97,8 +177,10 @@ function makeObserver(doc) {
 function init() {
   if (typeof document === 'undefined') return; // safe to prepend to any renderer bundle
   const doc = document;
+  dlog('init() running; readyState =', doc.readyState, '; GM_addStyle =', typeof GM_addStyle);
   if (doc.documentElement.hasAttribute('data-claude-rtl')) return; // idempotent
   doc.documentElement.setAttribute('data-claude-rtl', '1');
+  dlog('data-claude-rtl set');
 
   injectCSS(doc);
 
@@ -123,7 +205,11 @@ function init() {
   else doc.addEventListener('DOMContentLoaded', () => makeObserver(doc), { once: true });
 }
 
-init();
+try {
+  init();
+} catch (e) {
+  if (typeof console !== 'undefined') console.error('[claude-rtl] init failed:', e);
+}
 
 // __EXPORTS__ (everything below is stripped when inlined into the browser payload)
 const api = { init, processTable, processRoot };

@@ -3,23 +3,32 @@
  * on the actual <p>/<li>/<td>/… , never on a container. This per-leaf `plaintext` is
  * the SOLE base-direction mechanism for prose (§3.2, §8.K) — no JS ever sets dir on a
  * prose block, so a mixed English/Hebrew document renders block-by-block with NO
- * global flip. :where() keeps specificity at 0 so Claude's own styles win ties unless
- * we deliberately override. */
+ * global flip. `plaintext` drives BOTH glyph order and `text-align: start` per block.
+ *
+ * Root anchors are claude.ai's real message containers (the legacy `.prose` is gone):
+ *   .standard-markdown / .font-claude-response  → assistant message markdown
+ *   [data-testid="user-message"]                → user message
+ * `.prose` / `.font-claude-message` are kept as forward/back-compat fallbacks.
+ *
+ * Claude HARD-SETS `unicode-bidi: isolate` + base `direction: ltr` on these blocks via
+ * its own stylesheet, so we use a TARGETED `!important` on exactly the two properties it
+ * fights us on (unicode-bidi, text-align) — the narrowest reliable override per §4. The
+ * `:where()` root keeps specificity contributed by the container at 0. */
 
-/* Per-paragraph base direction via the browser's own UBA first-strong, logical align. */
-:where(.prose) p,
-:where(.prose) li,
-:where(.prose) h1, :where(.prose) h2, :where(.prose) h3,
-:where(.prose) h4, :where(.prose) h5, :where(.prose) h6,
-:where(.prose) blockquote,
-:where(.prose) td, :where(.prose) th,
-:where(.prose) dt, :where(.prose) dd,
-:where(.prose) figcaption, :where(.prose) caption {
-  unicode-bidi: plaintext;
-  text-align: start;
+:where(.prose, .standard-markdown, .font-claude-response, .font-claude-message, [data-testid="user-message"])
+  :is(p, li, h1, h2, h3, h4, h5, h6, blockquote, dt, dd, figcaption, caption, td, th) {
+  unicode-bidi: plaintext !important;
+  text-align: start !important;
 }
 
-/* Code & math NEVER reorder; isolate so neighbouring neutrals can't bleed in. */
+/* Long unbreakable LTR tokens (URLs) inside RTL must not blow out the bubble. */
+:where(.prose, .standard-markdown, .font-claude-response, .font-claude-message, [data-testid="user-message"])
+  :is(p, li) {
+  overflow-wrap: anywhere;
+}
+
+/* Code & math NEVER reorder; isolate so neighbouring neutrals can't bleed in. Claude
+ * already isolates these — this is a safe backstop. */
 pre,
 .code-block__code {
   direction: ltr;
@@ -35,6 +44,27 @@ code {
   unicode-bidi: isolate;
 }
 
+/* §8.D — a fenced block the engine judged to be RTL prose (Hebrew text Claude wrapped in
+ * ``` ), tagged by JS. Render it per-line RTL like prose; real code never gets this tag,
+ * so it stays LTR via the rules above. text-align:start follows the per-line `plaintext`
+ * direction, so Hebrew lines right-align. */
+pre[data-rtl-text],
+pre[data-rtl-text] code {
+  unicode-bidi: plaintext !important;
+  text-align: start !important;
+  /* Code blocks shrink-wrap inside an overflow-x-auto scroller, leaving text-align no
+   * room — force full-width block so every line anchors to the same right edge. */
+  display: block !important;
+  width: 100% !important;
+}
+
+/* §8.F — visual-only arrow mirroring. JS wraps each arrow that sits in an RTL block; the
+ * character is untouched (copy/Ctrl-F unchanged), only the glyph is flipped. */
+[data-rtl-arrow] {
+  display: inline-block;
+  transform: scaleX(-1);
+}
+
 /* Islands wrapped by JS (§3.6) isolate like UBA isolates; nesting works. */
 [data-rtl-island] {
   unicode-bidi: isolate;
@@ -45,9 +75,3 @@ code {
 [dir="rtl"] { direction: rtl; }
 [dir="ltr"] { direction: ltr; }
 table[dir="rtl"] { direction: rtl; }
-
-/* Long unbreakable LTR tokens (URLs) inside RTL must not blow out the bubble. */
-:where(.prose) p,
-:where(.prose) li {
-  overflow-wrap: anywhere;
-}

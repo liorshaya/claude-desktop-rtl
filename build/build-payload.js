@@ -14,6 +14,8 @@ const ROOT = path.join(__dirname, '..');
 const SOURCES = [
   'engine/ranges.js',
   'engine/numbers.js',
+  'engine/arrows.js',
+  'engine/code.js',
   'engine/detect.js',
   'engine/math.js',
   'dom/surfaces.js',
