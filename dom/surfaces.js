@@ -26,6 +26,9 @@ const SELECTORS = {
   // Includes prose-code blocks once they've been tagged data-rtl-text.
   leafBlock:
     'p, li, h1, h2, h3, h4, h5, h6, blockquote, dt, dd, figcaption, caption, td, th, pre[data-rtl-text]',
+  // Blocks with a direction-dependent DECORATION (list markers/indent, blockquote bar)
+  // get an explicit dir so the decoration lands on the content's side (§6).
+  dirBlock: 'ul, ol, li, blockquote',
 };
 
 function qsa(selector, root) {
@@ -54,6 +57,10 @@ function findLeafBlocks(root) {
   return qsa(SELECTORS.leafBlock, root);
 }
 
+function findDirBlocks(root) {
+  return qsa(SELECTORS.dirBlock, root);
+}
+
 // Read a <table>'s header cells and the first data column as plain text — the input
 // to engine.tableDir (§3.2). Returns { headers, firstColumn }.
 function readTableShape(table) {
@@ -73,6 +80,6 @@ function readTableShape(table) {
 // __EXPORTS__ (everything below is stripped when inlined into the browser payload)
 const api = {
   SELECTORS, qsa, findInputs, findMessageRoots, findTables, findCodeBlocks,
-  findLeafBlocks, readTableShape,
+  findLeafBlocks, findDirBlocks, readTableShape,
 };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;

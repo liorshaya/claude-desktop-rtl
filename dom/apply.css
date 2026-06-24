@@ -27,6 +27,10 @@
   overflow-wrap: anywhere;
 }
 
+/* RTL list markers/indent are handled by dir="auto" on each list/item (apply.js, §6) —
+ * that hangs the marker on the content's start side with the native gap. The [dir] rules
+ * below carry the direction. */
+
 /* Code & math NEVER reorder; isolate so neighbouring neutrals can't bleed in. Claude
  * already isolates these — this is a safe backstop. */
 pre,
@@ -43,6 +47,16 @@ code {
   direction: ltr;
   unicode-bidi: isolate;
 }
+
+/* §6/§12 — Artifacts & Cowork render user-authored content in a sandbox iframe with no
+ * .standard-markdown root. JS tags the document data-rtl-artifact; apply per-leaf RTL to
+ * EVERY block there (each self-determines via plaintext; explicit dir attrs still win). */
+:where([data-rtl-artifact]) :is(p, li, h1, h2, h3, h4, h5, h6, blockquote, dt, dd,
+  figcaption, caption, td, th) {
+  unicode-bidi: plaintext !important;
+  text-align: start !important;
+}
+:where([data-rtl-artifact]) :is(p, li) { overflow-wrap: anywhere; }
 
 /* §8.D — a fenced block the engine judged to be RTL prose (Hebrew text Claude wrapped in
  * ``` ), tagged by JS. Render it per-line RTL like prose; real code never gets this tag,
@@ -75,3 +89,16 @@ pre[data-rtl-text] code {
 [dir="rtl"] { direction: rtl; }
 [dir="ltr"] { direction: ltr; }
 table[dir="rtl"] { direction: rtl; }
+
+/* Claude draws the blockquote bar with a PHYSICAL border-left (Tailwind border-l-4) +
+ * padding-left + margin-left, which dir="rtl" can't flip. Move the bar and indent to the
+ * right for an RTL blockquote. Width/style fixed; colour inherits Claude's border-color. */
+blockquote[dir="rtl"] {
+  border-left-width: 0 !important;
+  border-right-width: 4px !important;
+  border-right-style: solid !important;
+  padding-left: 0 !important;
+  padding-right: 1rem !important;
+  margin-left: 0 !important;
+  margin-right: 0.5rem !important;
+}

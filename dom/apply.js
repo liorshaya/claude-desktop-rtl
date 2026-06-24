@@ -80,10 +80,26 @@ function applyInputDir(node) {
   sweepInputs(node);
 }
 
+// Process a freshly-added subtree SYNCHRONOUSLY (in the observer microtask, before paint)
+// so content that arrives complete — opening an Artifact, a finished table — is RTL on
+// first paint with no LTR→RTL flicker. Streaming chat is still caught by the debounced
+// pass. Idempotent (stamps), so the later pass is a no-op on what we already did here.
+function processAdded(node) {
+  if (!node || node.nodeType !== 1) return;
+  applyInputDir(node);
+  if (node.matches && node.matches('table')) processTable(node);
+  const tables = node.querySelectorAll ? node.querySelectorAll('table') : [];
+  for (let i = 0; i < tables.length && i < MAX_NODES_PER_PASS; i++) processTable(tables[i]);
+  if (node.matches && node.matches(SELECTORS.dirBlock)) processDirBlock(node);
+  const dirBlocks = node.querySelectorAll ? node.querySelectorAll(SELECTORS.dirBlock) : [];
+  for (let i = 0; i < dirBlocks.length && i < MAX_NODES_PER_PASS; i++) processDirBlock(dirBlocks[i]);
+}
+
 // Flip a table's column order when the engine says the table is RTL (§3.2). This is the
 // only dir attribute JS writes on rendered content. Idempotent via DONE_ATTR.
 function processTable(table) {
   if (table.getAttribute(DONE_ATTR)) return;
+  if (table.closest('pre, code')) return; // a table inside a source/code view stays LTR
   const shape = readTableShape(table);
   if (tableDir(shape.headers, shape.firstColumn) === 'rtl') table.setAttribute('dir', 'rtl');
   table.setAttribute(DONE_ATTR, '1');
@@ -140,10 +156,23 @@ function splitArrows(node) {
   if (node.parentNode) node.parentNode.replaceChild(frag, node);
 }
 
+// §6 — blocks whose DECORATION depends on direction (list marker/indent, blockquote bar)
+// are the Lior-approved exception where JS sets dir, so the decoration sits on the content
+// side. We use the engine's detection (not plain dir="auto"): it strips leading English/
+// brand words and falls back to majority, so a block that OPENS in English but is mostly
+// Hebrew still reads RTL. null (neutral-only) → dir="auto". Never overwrite an explicit dir.
+function processDirBlock(el) {
+  if (el.getAttribute('dir')) return;
+  if (el.closest('pre, code')) return; // inside a source/code view → stays LTR
+  el.setAttribute('dir', detectBlockDir(el.textContent || '') || 'auto');
+}
+
 function processRoot(root) {
   if (!root) return;
   const tables = findTables(root);
   for (let i = 0; i < tables.length && i < MAX_NODES_PER_PASS; i++) processTable(tables[i]);
+  const dirBlocks = findDirBlocks(root);
+  for (let i = 0; i < dirBlocks.length && i < MAX_NODES_PER_PASS; i++) processDirBlock(dirBlocks[i]);
   const codeBlocks = findCodeBlocks(root);
   for (let i = 0; i < codeBlocks.length && i < MAX_NODES_PER_PASS; i++) processCodeBlock(codeBlocks[i]);
   const leaves = findLeafBlocks(root);
@@ -180,9 +209,10 @@ function makeObserver(doc) {
     for (const m of mutations) {
       // Inputs are handled SYNCHRONOUSLY (no debounce) so a freshly-opened edit box is
       // dir="auto" before its first paint — the table/island pass stays deferred.
-      for (let i = 0; i < m.addedNodes.length; i++) applyInputDir(m.addedNodes[i]);
+      for (let i = 0; i < m.addedNodes.length; i++) processAdded(m.addedNodes[i]);
       const target = m.target && m.target.nodeType === 1 ? m.target : doc.body;
-      // Scope work to the nearest message root when we can; else the target subtree.
+      // Scope to the nearest chat message root when we can; else the mutating subtree (so
+      // a RENDERED artifact panel still gets RTL). Source/code views are skipped per-pass.
       const root = (target.closest && target.closest(SELECTORS.messageRoot)) || target;
       pending.add(root);
     }
@@ -205,6 +235,14 @@ function init() {
   }
   if (doc.documentElement.hasAttribute('data-claude-rtl')) return; // already fully initialized
   dlog('init() running; url =', doc.location && doc.location.href, '; GM_addStyle =', typeof GM_addStyle);
+
+  // Artifacts/Cowork run in a sandbox iframe (a.claude.ai) with user-authored content that
+  // has no .standard-markdown root — mark it so CSS applies leaf-block RTL broadly (§6, §12).
+  let inFrame = false;
+  try { inFrame = window.top !== window.self; } catch (e) { inFrame = true; } // cross-origin throw == framed
+  if (inFrame || /(^|\.)a\.claude\.ai$/.test(doc.location ? doc.location.hostname : '')) {
+    doc.documentElement.setAttribute('data-rtl-artifact', '1');
+  }
 
   ensureCSS(doc);
 
