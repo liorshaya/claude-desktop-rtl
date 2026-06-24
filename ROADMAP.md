@@ -53,7 +53,7 @@ Done when:
 - Simulating a Claude update re-fires the patch after the swap settles;
   `--watch` / `--unwatch` toggle the LaunchAgent.
 
-## P4 — Trust + preflights   [TODO]
+## P4 — Trust + preflights   [DONE]
 Branch: `p4-trust`
 Context Required: `ARCHITECTURE.md` §11
 Build:
