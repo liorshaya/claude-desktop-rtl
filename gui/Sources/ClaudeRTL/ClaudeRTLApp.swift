@@ -13,8 +13,9 @@ struct ClaudeRTLApp: App {
     }
 }
 
+// Muted warm terracotta — clearly the Claude orange, but not a neon/eye-searing yellow.
 private let brandGradient = LinearGradient(
-    colors: [Color(red: 0.96, green: 0.45, blue: 0.24), Color(red: 0.91, green: 0.28, blue: 0.13)],
+    colors: [Color(red: 0.84, green: 0.40, blue: 0.28), Color(red: 0.74, green: 0.27, blue: 0.18)],
     startPoint: .topLeading, endPoint: .bottomTrailing
 )
 
