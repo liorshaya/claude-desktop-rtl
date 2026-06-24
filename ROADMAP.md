@@ -44,7 +44,7 @@ Done when:
 - `Claude-RTL.app` builds; original `/Applications/Claude.app` untouched; the app
   launches (no black screen); RTL is active; Cowork still works.
 
-## P3 — Auto-reapply watcher   [TODO]
+## P3 — Auto-reapply watcher   [DONE]
 Branch: `p3-watcher`
 Context Required: `ARCHITECTURE.md` §10
 Build:
