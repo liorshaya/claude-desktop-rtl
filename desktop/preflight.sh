@@ -6,10 +6,26 @@ set -euo pipefail
 
 ORIG_APP="${ORIG_APP:-/Applications/Claude.app}"
 DEST_DIR="${DEST_DIR:-$HOME/Applications}"
+DEST_APP="${DEST_APP:-$DEST_DIR/Claude-RTL.app}"
 
 die() { echo "preflight: ERROR — $*" >&2; exit 1; }
 
 [ "$(uname -s)" = "Darwin" ] || die "macOS only (this is $(uname -s))."
+
+# --- Node version manager shim: a shimmed npx may dispatch to a wrong/old node, or fail
+# under launchd's bare environment. Prefer a real system node/npx when npx is a shim. ---
+NPX_PATH="$(command -v npx 2>/dev/null || true)"
+case "$NPX_PATH" in
+  *"/.nvm/"*|*"/.fnm/"*|*"/.volta/"*|*"/.asdf/"*|*"fnm_multishells"*|*"/n/"*)
+    for sys in /usr/local/bin /opt/homebrew/bin; do
+      if [ -x "$sys/npx" ] && [ -x "$sys/node" ]; then
+        export PATH="$sys:$PATH"
+        echo "preflight: npx was a version-manager shim ($NPX_PATH) — using system Node at $sys." >&2
+        break
+      fi
+    done
+    ;;
+esac
 
 # --- Toolchain: node + npx (the asar/fuses tools run via npx) ---
 command -v node >/dev/null 2>&1 || die "node not found on PATH."
@@ -23,8 +39,18 @@ command -v codesign >/dev/null 2>&1 || die "codesign not found (install Xcode co
 [ -f "$ORIG_APP/Contents/Resources/app.asar" ] || \
   die "no app.asar under $ORIG_APP/Contents/Resources — unexpected layout."
 
-# --- Destination writable (never the original) ---
+# --- Destination writable (never the original) — probe with a real write, not just -w ---
 mkdir -p "$DEST_DIR" 2>/dev/null || die "cannot create $DEST_DIR."
-[ -w "$DEST_DIR" ] || die "$DEST_DIR is not writable."
+PROBE="$DEST_DIR/.claude-rtl-write-probe.$$"
+( : > "$PROBE" ) 2>/dev/null || die "$DEST_DIR is not writable."
+rm -f "$PROBE"
+
+# --- File-lock: a uchg (Finder "Locked") flag on the existing copy blocks the rebuild ---
+if [ -e "$DEST_APP" ]; then
+  FLAGS="$(stat -f %Sf "$DEST_APP" 2>/dev/null || echo)"
+  case "$FLAGS" in
+    *uchg*) die "$DEST_APP is locked (uchg) — unlock with: chflags -R nouchg \"$DEST_APP\"" ;;
+  esac
+fi
 
 echo "preflight: OK — node $(node -v), npx present, app.asar found, $DEST_DIR writable."
