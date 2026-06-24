@@ -28,10 +28,28 @@ const SETTLE_MS = 250; // §3.3: run the heavy pass only after the stream goes q
 const MAX_NODES_PER_PASS = 400; // backstop so a giant transcript can't lock the thread.
 const DONE_ATTR = 'data-rtl-done';
 
-function injectCSS(doc) {
-  // In a userscript on a strict-CSP site (claude.ai), GM_addStyle is the CSP-safe path;
-  // typeof-guarded so the Electron renderer (no GM) falls back to a plain <style>.
-  if (typeof GM_addStyle === 'function') { GM_addStyle(APPLY_CSS); return; }
+// Idempotent + self-healing. Called from init AND every observer pass. The Claude web app
+// (React/Next) clears foreign <style> elements from <head> on render, so the desktop path
+// uses an ADOPTED stylesheet — a CSSStyleSheet attached to the document that is NOT a DOM
+// node, so the framework can't remove it. Userscript keeps the proven GM_addStyle path.
+function ensureCSS(doc) {
+  if (typeof GM_addStyle === 'function') {
+    if (doc.getElementById('claude-rtl-style')) return;
+    const el = GM_addStyle(APPLY_CSS);
+    if (el && typeof el === 'object') el.id = 'claude-rtl-style'; // tag so the guard sees it
+    return;
+  }
+  // Electron / no-GM: constructable stylesheet survives the app clearing the DOM head.
+  if (doc.__claudeRtlSheet && doc.adoptedStyleSheets.indexOf(doc.__claudeRtlSheet) !== -1) return;
+  try {
+    const sheet = doc.__claudeRtlSheet || new CSSStyleSheet();
+    if (!doc.__claudeRtlSheet) { sheet.replaceSync(APPLY_CSS); doc.__claudeRtlSheet = sheet; }
+    doc.adoptedStyleSheets = doc.adoptedStyleSheets.concat(sheet);
+    dlog('adopted stylesheet attached');
+    return;
+  } catch (e) {
+    dlog('adoptedStyleSheets failed, falling back to <style>:', e && e.message);
+  }
   if (doc.getElementById('claude-rtl-style')) return;
   const style = doc.createElement('style');
   style.id = 'claude-rtl-style';
@@ -147,6 +165,7 @@ function makeObserver(doc) {
 
   const flush = () => {
     timer = null;
+    ensureCSS(doc); // self-heal: re-inject the stylesheet if the app ever removed it
     const roots = pending.size ? Array.from(pending) : [doc.body];
     pending.clear();
     for (const r of roots) processRoot(r);
@@ -177,12 +196,17 @@ function makeObserver(doc) {
 function init() {
   if (typeof document === 'undefined') return; // safe to prepend to any renderer bundle
   const doc = document;
-  dlog('init() running; readyState =', doc.readyState, '; GM_addStyle =', typeof GM_addStyle);
-  if (doc.documentElement.hasAttribute('data-claude-rtl')) return; // idempotent
-  doc.documentElement.setAttribute('data-claude-rtl', '1');
-  dlog('data-claude-rtl set');
+  // In Electron the payload runs at document-start, when documentElement (and body) may
+  // not exist yet — retry once the DOM tree is built. (The browser userscript never hit
+  // this because the page was already parsed.)
+  if (!doc.documentElement) {
+    doc.addEventListener('DOMContentLoaded', init, { once: true });
+    return;
+  }
+  if (doc.documentElement.hasAttribute('data-claude-rtl')) return; // already fully initialized
+  dlog('init() running; url =', doc.location && doc.location.href, '; GM_addStyle =', typeof GM_addStyle);
 
-  injectCSS(doc);
+  ensureCSS(doc);
 
   // Initial sweep over whatever is already rendered.
   for (const r of findMessageRoots(doc)) processRoot(r);
@@ -203,6 +227,11 @@ function init() {
 
   if (doc.body) makeObserver(doc);
   else doc.addEventListener('DOMContentLoaded', () => makeObserver(doc), { once: true });
+
+  // Success marker, set LAST: if anything above threw, the next bundle's payload retries
+  // a full init instead of skipping (the desktop bug where rtlFlag was set but CSS wasn't).
+  doc.documentElement.setAttribute('data-claude-rtl', '1');
+  dlog('init complete; data-claude-rtl set');
 }
 
 try {
