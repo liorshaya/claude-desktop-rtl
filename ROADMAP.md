@@ -62,7 +62,7 @@ Done when:
 - Payload + script signature verified before anything runs; preflights handle the
   known failure modes with specific, named errors.
 
-## P5 — Coverage + polish   [TODO]
+## P5 — Coverage + polish   [DONE]
 Branch: `p5-coverage`
 Context Required: `ARCHITECTURE.md` §6, §12
 Build:
