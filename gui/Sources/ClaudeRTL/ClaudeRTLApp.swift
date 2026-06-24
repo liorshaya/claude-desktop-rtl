@@ -18,6 +18,24 @@ private let brandGradient = LinearGradient(
     startPoint: .topLeading, endPoint: .bottomTrailing
 )
 
+// A soft warm-orange gradient button (the system .orange tint renders an eye-searing yellow).
+private struct BrandButton: ButtonStyle {
+    @Environment(\.isEnabled) private var enabled
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.body.weight(.semibold))
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 9)
+            .background(brandGradient.opacity(configuration.isPressed ? 0.85 : 1),
+                        in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .shadow(color: Color(red: 0.91, green: 0.28, blue: 0.13).opacity(0.22), radius: 4, y: 2)
+            .opacity(enabled ? 1 : 0.45)
+            .saturation(enabled ? 1 : 0.3)
+            .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+}
+
 struct ContentView: View {
     @ObservedObject var runner: PatchRunner
     @State private var showDetails = false
@@ -123,9 +141,9 @@ struct ContentView: View {
             Task { await runner.install() }
         } label: {
             Label(primaryTitle, systemImage: s.patchedInstalled ? "arrow.clockwise" : "arrow.down.circle.fill")
-                .font(.body.weight(.semibold)).frame(maxWidth: .infinity).padding(.vertical, 3)
         }
-        .buttonStyle(.borderedProminent).tint(.orange).controlSize(.large).disabled(runner.busy)
+        .buttonStyle(BrandButton())
+        .disabled(runner.busy)
     }
 
     private var secondaryRow: some View {

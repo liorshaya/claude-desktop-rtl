@@ -123,9 +123,13 @@ final class PatchRunner: ObservableObject {
         }
     }
 
+    // Pull "1.15200.0" out of a status line like "... (v1.15200.0) — installed".
     private static func version(in text: String, line: String) -> String {
-        for l in text.split(separator: "\n") where l.contains(line + " ") {
-            if let r = l.range(of: "v") { return String(l[r.lowerBound...]).split(separator: " ").first.map(String.init) ?? "—" }
+        for l in text.split(separator: "\n") where l.contains(line) {
+            if let open = l.range(of: "(v"),
+               let close = l.range(of: ")", range: open.upperBound..<l.endIndex) {
+                return String(l[open.upperBound..<close.lowerBound])
+            }
         }
         return "—"
     }
