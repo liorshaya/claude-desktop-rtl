@@ -46,6 +46,19 @@ asar_extract() { if [ -n "$HELPER" ]; then "$HELPER" extract "$1" "$2"; else npx
 asar_pack()    { if [ -n "$HELPER" ]; then "$HELPER" pack "$1" "$2" "$UNPACK_GLOB"; else npx --yes @electron/asar pack "$1" "$2" --unpack "$UNPACK_GLOB"; fi; }
 fuses_off()    { if [ -n "$HELPER" ]; then "$HELPER" fuses "$1" EnableEmbeddedAsarIntegrityValidation=off; else npx --yes @electron/fuses write --app "$1" EnableEmbeddedAsarIntegrityValidation=off >/dev/null; fi; }
 
+# Quit a running app by its EXACT bundle path (so we never touch the other Claude). Used
+# before uninstall (else the process lingers in the Dock) and before re-patch (else we
+# rm -rf a running bundle). Matches even after the .app is deleted (path stays in argv).
+quit_app_at() {
+  local marker="$1/Contents/MacOS/"
+  pgrep -f "$marker" >/dev/null 2>&1 || return 0
+  log "quitting running app at $1…"
+  pkill -f "$marker" 2>/dev/null || true
+  local i=0
+  while pgrep -f "$marker" >/dev/null 2>&1 && [ "$i" -lt 20 ]; do sleep 0.5; i=$((i+1)); done
+  pkill -9 -f "$marker" 2>/dev/null || true
+}
+
 cmd_status() {
   if [ -d "$ORIG_APP" ]; then echo "original : $ORIG_APP (v$(app_version "$ORIG_APP")) — untouched"; else echo "original : MISSING ($ORIG_APP)"; fi
   if [ -d "$DEST_APP" ]; then echo "patched  : $DEST_APP (v$(app_version "$DEST_APP")) — installed"; else echo "patched  : not installed"; fi
@@ -53,9 +66,13 @@ cmd_status() {
 }
 
 cmd_uninstall() {
-  [ -d "$DEST_APP" ] || { log "nothing to remove ($DEST_APP)"; return; }
-  rm -rf "$DEST_APP"
-  log "removed $DEST_APP (original untouched)."
+  quit_app_at "$DEST_APP"   # close the running copy first, else it lingers in the Dock
+  if [ -d "$DEST_APP" ]; then
+    rm -rf "$DEST_APP"
+    log "removed $DEST_APP (original untouched)."
+  else
+    log "nothing to remove ($DEST_APP)."
+  fi
 }
 
 # --- Auto-reapply watcher (§10): a user LaunchAgent that re-patches after a Claude update ---
@@ -113,6 +130,7 @@ cmd_install() {
   grep -q "$MARKER" "$PAYLOAD" || die "payload missing marker $MARKER — build looks wrong."
 
   log "copying $ORIG_APP → $DEST_APP (original is never modified)…"
+  quit_app_at "$DEST_APP"   # never rm -rf a running bundle (an update would corrupt it)
   rm -rf "$DEST_APP"
   cp -R "$ORIG_APP" "$DEST_APP"
 

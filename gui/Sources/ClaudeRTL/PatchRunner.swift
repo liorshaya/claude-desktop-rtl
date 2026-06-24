@@ -71,8 +71,27 @@ final class PatchRunner: ObservableObject {
     func install() async { busy = true; log = ""; await runPatch(["--install"]); await refresh(); busy = false }
     func uninstall() async { busy = true; await runPatch(["--uninstall"]); await refresh(); busy = false }
     func setWatch(_ on: Bool) async { busy = true; await runPatch([on ? "--watch" : "--unwatch"]); await refresh(); busy = false }
-    func openPatched() async { _ = await run("/usr/bin/open", [NSHomeDirectory() + "/Applications/Claude-RTL.app"]) }
-    func quitOriginal() async { _ = await run("/usr/bin/osascript", ["-e", "tell application \"Claude\" to quit"]); await refresh() }
+    // The original and the patched copy share a userData dir, so they can't run together —
+    // quit the original, wait for it to fully exit (Cowork cleanup can take a moment), then
+    // open Claude-RTL.
+    func openPatched() async {
+        busy = true
+        let rtl = NSHomeDirectory() + "/Applications/Claude-RTL.app"
+        let m = "/Applications/Claude.app/Contents/MacOS/"
+        _ = await run("/bin/bash", ["-c", """
+        pkill -f '\(m)' 2>/dev/null || true
+        for _ in $(seq 1 60); do pgrep -f '\(m)' >/dev/null 2>&1 || break; sleep 1; done
+        open "\(rtl)"
+        """])
+        busy = false
+        await refresh()
+    }
+
+    // Quit ONLY the original (matched by its exact path), never the RTL copy.
+    func quitOriginal() async {
+        _ = await run("/bin/bash", ["-c", "pkill -f '/Applications/Claude.app/Contents/MacOS/' 2>/dev/null; true"])
+        await refresh()
+    }
 
     private func isOriginalRunning() async -> Bool {
         await capture("/bin/bash", ["-c", "pgrep -f '/Applications/Claude.app/Contents/MacOS/Claude' >/dev/null && echo yes || echo no"])
