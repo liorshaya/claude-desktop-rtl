@@ -68,6 +68,21 @@ cmd_unwatch() {
 }
 
 cmd_install() {
+  # Trust gate (§11): verify signed payload + scripts before doing anything. 0=verified,
+  # 2=unsigned (dev), 1=tampered. Strict mode refuses an unsigned build too.
+  if [ -f "$SCRIPT_DIR/verify.sh" ]; then
+    local vrc=0
+    bash "$SCRIPT_DIR/verify.sh" || vrc=$?
+    if [ "$vrc" -eq 1 ]; then
+      die "integrity check failed — refusing to patch. Re-run desktop/sign.sh after legitimate changes."
+    elif [ "$vrc" -eq 2 ]; then
+      [ "${CLAUDE_RTL_STRICT:-0}" = "1" ] && die "unsigned build and CLAUDE_RTL_STRICT=1 set — refusing."
+      log "WARNING: unsigned build (no signed manifest) — proceeding in dev mode."
+    else
+      log "integrity verified (signed payload + scripts)."
+    fi
+  fi
+
   bash "$SCRIPT_DIR/preflight.sh"
 
   log "building payload…"
