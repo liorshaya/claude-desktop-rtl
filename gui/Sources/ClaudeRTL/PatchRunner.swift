@@ -19,13 +19,28 @@ final class PatchRunner: ObservableObject {
     @Published var log = ""
     @Published var busy = false
 
-    // Dev location of the pipeline. Step 3 bundles these into the .app's Resources.
-    private let scriptsDir = NSHomeDirectory() + "/Developer/claude-desktop-rtl/desktop"
+    // The shipped .app carries the whole node-free pipeline in Resources; fall back to the
+    // dev repo when running via `swift run`.
+    private var bundledResources: URL? {
+        guard let r = Bundle.main.resourceURL,
+              FileManager.default.fileExists(atPath: r.appendingPathComponent("scripts/patch.sh").path)
+        else { return nil }
+        return r
+    }
+    private var scriptsDir: String {
+        bundledResources?.appendingPathComponent("scripts").path
+            ?? NSHomeDirectory() + "/Developer/claude-desktop-rtl/desktop"
+    }
 
-    // GUI/launchd processes start with a bare PATH — give bash node/npx + the usual tools.
+    // GUI/launchd processes start with a bare PATH — give bash the usual tools. When bundled,
+    // point patch.sh at the bundled helper + payload so it patches with NO system Node.
     private var env: [String: String] {
         var e = ProcessInfo.processInfo.environment
         e["PATH"] = "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+        if let r = bundledResources {
+            e["CLAUDE_RTL_HELPER"] = r.appendingPathComponent("claude-rtl-helper").path
+            e["CLAUDE_RTL_PAYLOAD"] = r.appendingPathComponent("payload.js").path
+        }
         return e
     }
 

@@ -65,6 +65,15 @@ cmd_watch() {
   mkdir -p "$HOME/Library/LaunchAgents" "$HOME/Library/Logs"
   sed -e "s#__WATCH_SH__#$SCRIPT_DIR/watch.sh#g" -e "s#__LOG__#$WATCH_LOG#g" \
     "$WATCH_PLIST_SRC" > "$WATCH_PLIST_DST"
+  # Bundled (.app) install: pass the node-free helper + payload into the agent's env so the
+  # auto-re-patch also runs without system Node.
+  if [ -n "${CLAUDE_RTL_HELPER:-}" ] && [ -n "${CLAUDE_RTL_PAYLOAD:-}" ]; then
+    for kv in "CLAUDE_RTL_HELPER:$CLAUDE_RTL_HELPER" "CLAUDE_RTL_PAYLOAD:$CLAUDE_RTL_PAYLOAD"; do
+      k="${kv%%:*}"; v="${kv#*:}"
+      /usr/libexec/PlistBuddy -c "Add :EnvironmentVariables:$k string $v" "$WATCH_PLIST_DST" 2>/dev/null \
+        || /usr/libexec/PlistBuddy -c "Set :EnvironmentVariables:$k $v" "$WATCH_PLIST_DST"
+    done
+  fi
   launchctl bootout "gui/$(id -u)/$WATCH_LABEL" 2>/dev/null || true   # reload if already loaded
   launchctl bootstrap "gui/$(id -u)" "$WATCH_PLIST_DST" || die "launchctl bootstrap failed."
   log "watcher installed → $WATCH_PLIST_DST"
