@@ -33,7 +33,9 @@ chmod +x "$RES/claude-rtl-helper" "$RES/scripts/"*.sh
 # Menu-bar status icon (template PNGs → monochrome, adapts to light/dark menu bar).
 cp "$REPO/assets/claude-rtl-statusTemplate.png" "$REPO/assets/claude-rtl-statusTemplate@2x.png" "$RES/"
 
-cat > "$APP/Contents/Info.plist" <<'PLIST'
+# Single source of version truth — the repo's VERSION file (also what "Check for updates" reads).
+VERSION="$(tr -d ' \t\n' < "$REPO/VERSION" 2>/dev/null || echo 0.0.0)"
+cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "https://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -43,7 +45,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
   <key>CFBundleIdentifier</key><string>com.claude-rtl.manager</string>
   <key>CFBundleExecutable</key><string>ClaudeRTL</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>0.1.0</string>
+  <key>CFBundleShortVersionString</key><string>${VERSION}</string>
   <key>CFBundleVersion</key><string>1</string>
   <key>LSUIElement</key><true/>
   <key>LSMinimumSystemVersion</key><string>13.0</string>

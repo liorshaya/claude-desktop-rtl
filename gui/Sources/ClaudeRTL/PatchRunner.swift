@@ -13,11 +13,27 @@ struct AppStatus {
     var originalRunning = false
 }
 
+// State of the user-initiated update check (see PatchRunner.checkForUpdates).
+enum UpdateCheck: Equatable {
+    case idle, checking, upToDate
+    case available(String)   // the newer version string upstream
+    case failed(String)      // a short human reason
+}
+
 @MainActor
 final class PatchRunner: ObservableObject {
     @Published var status = AppStatus()
     @Published var log = ""
     @Published var busy = false
+    @Published var updateCheck: UpdateCheck = .idle
+
+    // This manager's own version (baked into Info.plist from the repo's VERSION file).
+    let managerVersion = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "dev"
+    let repoURL = URL(string: "https://github.com/liorshaya/claude-desktop-rtl")!
+    // The SOLE network call in the whole project, and only in the manager (never the engine /
+    // injected payload, which stay strictly zero-network). User-initiated, GET-only, sends
+    // nothing: just reads the repo's VERSION file to tell you a newer build exists.
+    private let versionURL = URL(string: "https://raw.githubusercontent.com/liorshaya/claude-desktop-rtl/main/VERSION")!
 
     // The shipped .app carries the whole node-free pipeline in Resources; fall back to the
     // dev repo when running via `swift run`.
@@ -121,6 +137,36 @@ final class PatchRunner: ObservableObject {
                 cont.resume(returning: (String(data: data, encoding: .utf8) ?? "", p.terminationStatus))
             }
         }
+    }
+
+    // Fetch the repo's VERSION and compare to ours. One GET, on explicit click only.
+    func checkForUpdates() async {
+        updateCheck = .checking
+        var req = URLRequest(url: versionURL)
+        req.cachePolicy = .reloadIgnoringLocalCacheData
+        req.timeoutInterval = 10
+        do {
+            let (data, resp) = try await URLSession.shared.data(for: req)
+            guard let http = resp as? HTTPURLResponse, http.statusCode == 200,
+                  let raw = String(data: data, encoding: .utf8) else {
+                updateCheck = .failed("couldn't reach GitHub"); return
+            }
+            let latest = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            updateCheck = Self.isNewer(latest, than: managerVersion) ? .available(latest) : .upToDate
+        } catch {
+            updateCheck = .failed("offline?")
+        }
+    }
+
+    // Compare dotted numeric versions: 0.2.0 > 0.1.9 > 0.1.0.
+    static func isNewer(_ a: String, than b: String) -> Bool {
+        let pa = a.split(separator: ".").map { Int($0) ?? 0 }
+        let pb = b.split(separator: ".").map { Int($0) ?? 0 }
+        for i in 0..<max(pa.count, pb.count) {
+            let x = i < pa.count ? pa[i] : 0, y = i < pb.count ? pb[i] : 0
+            if x != y { return x > y }
+        }
+        return false
     }
 
     // Pull "1.15200.0" out of a status line like "... (v1.15200.0) — installed".

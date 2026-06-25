@@ -1,17 +1,39 @@
 import SwiftUI
+import AppKit
 
 @main
 struct ClaudeRTLApp: App {
     @StateObject private var runner = PatchRunner()
 
     var body: some Scene {
-        MenuBarExtra("Claude RTL", image: "claude-rtl-statusTemplate") {
+        MenuBarExtra {
             ContentView(runner: runner)
                 .task { await runner.refresh() }
+        } label: {
+            Image(nsImage: Self.statusIcon)
         }
         .menuBarExtraStyle(.window)
     }
+
+    // isTemplate → monochrome, adapts to the light/dark menu bar.
+    private static let statusIcon: NSImage = {
+        let img = bundledNSImage("claude-rtl-statusTemplate")
+        img.isTemplate = true
+        img.size = NSSize(width: 26, height: 26)
+        return img
+    }()
 }
+
+// SwiftUI's Image("name") won't resolve a loose bundle PNG without an asset catalog, so load
+// the NSImage explicitly (named → handles @2x; path fallback; empty image as a last resort).
+func bundledNSImage(_ name: String) -> NSImage {
+    NSImage(named: name)
+        ?? Bundle.main.url(forResource: name, withExtension: "png").flatMap { NSImage(contentsOf: $0) }
+        ?? NSImage()
+}
+
+// Our logo (the menu-bar template glyph) for in-window use — rendered white over the gradient.
+let brandLogo: NSImage = bundledNSImage("claude-rtl-statusTemplate")
 
 // Muted warm terracotta — clearly the Claude orange, but not a neon/eye-searing yellow.
 private let brandGradient = LinearGradient(
@@ -72,12 +94,14 @@ struct ContentView: View {
     private var header: some View {
         HStack(spacing: 12) {
             ZStack {
-                RoundedRectangle(cornerRadius: 11, style: .continuous).fill(brandGradient)
-                    .shadow(color: .black.opacity(0.18), radius: 3, y: 1)
-                Image(systemName: "character.bubble.fill")
-                    .font(.system(size: 18, weight: .semibold)).foregroundStyle(.white)
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .fill(Color(red: 0.99, green: 0.97, blue: 0.94))   // Claude's warm off-white
+                    .shadow(color: .black.opacity(0.16), radius: 3, y: 1)
+                Image(nsImage: brandLogo)
+                    .resizable().renderingMode(.template).scaledToFit()
+                    .frame(width: 44, height: 44).foregroundStyle(brandGradient)   // Claude orange
             }
-            .frame(width: 38, height: 38)
+            .frame(width: 50, height: 50)
             VStack(alignment: .leading, spacing: 2) {
                 Text("Claude RTL").font(.headline)
                 Text("Smooth Hebrew & Arabic for Claude").font(.caption).foregroundStyle(.secondary)
@@ -209,6 +233,7 @@ struct ContentView: View {
                     .padding(8)
                     .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
                 }
+                updateRow
                 HStack {
                     Button { Task { await runner.refresh() } } label: { Label("Refresh", systemImage: "arrow.clockwise") }
                     Spacer()
@@ -219,6 +244,36 @@ struct ContentView: View {
             .padding(.top, 6)
         }
         .font(.caption)
+    }
+
+    // Manager version + the user-initiated update check (the project's only network call).
+    private var updateRow: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 6) {
+                Text("Manager v\(runner.managerVersion)").font(.caption2).foregroundStyle(.secondary)
+                Spacer()
+                switch runner.updateCheck {
+                case .idle:
+                    Button("Check for updates") { Task { await runner.checkForUpdates() } }
+                case .checking:
+                    HStack(spacing: 5) { ProgressView().controlSize(.mini); Text("Checking…").font(.caption2).foregroundStyle(.secondary) }
+                case .upToDate:
+                    Label("Up to date", systemImage: "checkmark.circle.fill").font(.caption2).foregroundStyle(.green)
+                case .available(let v):
+                    Button { NSWorkspace.shared.open(runner.repoURL) } label: {
+                        Label("v\(v) available", systemImage: "arrow.down.circle.fill")
+                    }.foregroundStyle(.orange)
+                case .failed(let why):
+                    Button("Retry — \(why)") { Task { await runner.checkForUpdates() } }.foregroundStyle(.secondary)
+                }
+            }
+            .controlSize(.small).buttonStyle(.borderless)
+            if case .available = runner.updateCheck {
+                Text("git pull && cd gui && ./build.sh")
+                    .font(.system(.caption2, design: .monospaced)).foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+        }
     }
 
     // MARK: - Helpers
