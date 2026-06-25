@@ -54,8 +54,10 @@ powershell -ExecutionPolicy Bypass -File .\desktop\windows\patch.ps1 -Unwatch   
 ```
 
 `-Watch` adds a per-user logon entry and starts `watch.ps1` now; it waits for an update to settle,
-then re-patches. It checks "already patched?" read-only, so it never disturbs a running, patched
-Claude. Logs: `%LOCALAPPDATA%\claude-rtl\watch.log`.
+then re-patches **in place without force-killing Claude** (`patch.ps1 -NoStop`). It checks "already
+patched?" read-only, so it never disturbs a running, patched Claude; if a fresh update is already
+running, it defers and RTL applies on the next launch. Updates stay fully automatic — you run
+nothing by hand. Logs: `%LOCALAPPDATA%\claude-rtl\watch.log`.
 
 ## Later (per docs/WINDOWS.md §11)
 

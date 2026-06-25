@@ -276,8 +276,10 @@ Claude `1.15200.0`:
 4. **P7.2 — Helper.** `claude-rtl-helper.exe` via Node SEA + `hashreplace`.
 5. **P7.3 — Watcher. [DONE 2026-06-25]** `watch.ps1` (`FileSystemWatcher` on the AnthropicClaude dir
    + settle wait + a **read-only** marker check, so it never stops an already-patched Claude) plus
-   per-user logon persistence via `patch.ps1 -Watch` / `-Unwatch`. Validated with a simulated update
-   + persistence tests.
+   per-user logon persistence via `patch.ps1 -Watch` / `-Unwatch`. Re-applies via `patch.ps1 -NoStop`
+   behind a non-destructive lock pre-check: a fresh update is patched **in place without ever
+   force-killing a running Claude** (RTL takes effect on next launch; deferred + retried if the new
+   version is already running). Validated with a simulated update + persistence tests.
 6. **P7.4 — GUI.** WPF + H.NotifyIcon tray app wrapping the helper, mirroring `gui/`.
 7. **P7.5 — Distribution.** Inno Setup per-user + portable zip; unsigned; SmartScreen docs;
    pursue SignPath Foundation.
@@ -285,7 +287,34 @@ Claude `1.15200.0`:
 Layout follows [`CONTRIBUTING.md`](../CONTRIBUTING.md): platform subfolders (`desktop/windows`,
 `gui/windows`) with the shared core (`engine/`, `dom/`, `build/`, `helper/`) untouched.
 
-## 12. Sources
+## 12. Cowork on Windows — why it shows "requires a newer installation"
+
+Verified 2026-06-26 (Squirrel 1.15962.0, Windows 11 25H2 build **26200.8737**): Claude shows a
+**"Cowork requires a newer installation / Reinstall"** banner. This is **not caused by the RTL
+patch** — `cowork-svc.exe` is absent from the Squirrel build (no Cowork integrity gate exists for the
+patch to trip; the patch only prepends RTL code), and thousands of unpatched users report the same.
+Two stacked, **Anthropic-side** blockers:
+
+1. **Squirrel has no Cowork.** Cowork shipped with MSIX (2026-02-10); the legacy Squirrel install
+   cannot run it. The in-app **Reinstall button is itself broken** (it only checks the Squirrel
+   channel — anthropics/claude-code#28998), and the Squirrel→MSIX in-place upgrade silently fails
+   (`0x80073CFA` — #25162). Migrating needs a manual clean uninstall + fresh MSIX from
+   `claude.ai/download` (admin/UAC; Virtual Machine Platform / Hyper-V; Win Pro/Enterprise/Education).
+2. **The `yukonSilver` build-26200 bug.** Even on MSIX, Claude's internal `yukonSilver` VM
+   platform-detection flag marks Windows 11 25H2 / build 26200 as `unsupported` (logs:
+   `yukonSilver not supported (status=unsupported)` / `[startVM] VM not supported (win32/x64)`) **with
+   all virtualization enabled**. Widespread and unresolved as of Apr–May 2026 (#28238, #29322, #27499,
+   #27406, #50517, #30454). **No local override exists** (not registry, env, or an asar patch) — only
+   Anthropic can fix the build whitelist.
+
+**RTL-vs-Cowork tension:** on this machine Cowork is unreachable regardless of the RTL patch.
+Migrating to MSIX is painful, **breaks the Squirrel RTL patch** (MSIX = read-only `WindowsApps`,
+anti-tamper — the unsolved §3 hard case; the shraga100 prior art does not cover MSIX either), and —
+because of blocker #2 — likely still would not yield Cowork on build 26200. **Recommendation:** stay
+on Squirrel + RTL; track #28238 / #29322; revisit MSIX RTL support only once Anthropic fixes
+`yukonSilver`. (Cowork's "hand off long tasks" capability is already covered by Claude Code.)
+
+## 13. Sources
 
 - Prior art: [shraga100/claude-desktop-rtl-patch](https://github.com/shraga100/claude-desktop-rtl-patch)
 - [Deploy Claude Desktop for Windows](https://support.claude.com/en/articles/12622703-deploy-claude-desktop-for-windows) · [Squirrel→MSIX transition #25162](https://github.com/anthropics/claude-code/issues/25162)
