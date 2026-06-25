@@ -1,13 +1,13 @@
 <#
-  diagnose.ps1 — claude-rtl Windows spike (P7.0).
+  diagnose.ps1 - claude-rtl Windows spike (P7.0).
 
-  Answers the 7 open questions in docs/WINDOWS.md §10 about the LOCAL Claude install, so the
+  Answers the 7 open questions in docs/WINDOWS.md section 10 about the LOCAL Claude install, so the
   Windows patch pipeline can be built from reality instead of guesses. READ-ONLY: it inspects
   files and prints a report. It does NOT modify anything.
 
   Run in PowerShell (Win10/11):
       powershell -ExecutionPolicy Bypass -File .\desktop\windows\diagnose.ps1
-  If some probes say "access denied", re-run from an **elevated** PowerShell (Run as admin) —
+  If some probes say "access denied", re-run from an **elevated** PowerShell (Run as admin) -
   Claude's MSIX install dir is ACL-locked. Then copy the whole "REPORT" block back to the chat.
 #>
 
@@ -99,7 +99,7 @@ if ($cowork) {
   if ($svc) { foreach($s in $svc){ KV "service" "$($s.Name) [$($s.Status)]" } } else { KV "service" "none registered (may launch on demand)" }
   $proc = Get-Process 2>$null | Where-Object { $_.ProcessName -like '*cowork*' }
   KV "running proc" ($(if($proc){($proc|ForEach-Object ProcessName) -join ', '}else{'none'}))
-} else { KV "result" "no cowork-svc.exe — Cowork integrity check likely N/A on this install" }
+} else { KV "result" "no cowork-svc.exe - Cowork integrity check likely N/A on this install" }
 
 # --- Node availability ---------------------------------------------------------------------
 Hr "Node / npx availability (needed for asar + fuses probes)"
