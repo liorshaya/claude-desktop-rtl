@@ -5,7 +5,7 @@ struct ClaudeRTLApp: App {
     @StateObject private var runner = PatchRunner()
 
     var body: some Scene {
-        MenuBarExtra("Claude RTL", systemImage: "character.bubble") {
+        MenuBarExtra("Claude RTL", image: "claude-rtl-statusTemplate") {
             ContentView(runner: runner)
                 .task { await runner.refresh() }
         }

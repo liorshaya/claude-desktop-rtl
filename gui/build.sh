@@ -30,6 +30,9 @@ cp "$REPO/desktop/patch.sh" "$REPO/desktop/preflight.sh" \
    "$REPO/desktop/watch.sh" "$REPO/desktop/agent.plist" "$RES/scripts/"
 chmod +x "$RES/claude-rtl-helper" "$RES/scripts/"*.sh
 
+# Menu-bar status icon (template PNGs → monochrome, adapts to light/dark menu bar).
+cp "$REPO/assets/claude-rtl-statusTemplate.png" "$REPO/assets/claude-rtl-statusTemplate@2x.png" "$RES/"
+
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "https://www.apple.com/DTDs/PropertyList-1.0.dtd">
