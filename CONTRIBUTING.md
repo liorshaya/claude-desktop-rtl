@@ -57,12 +57,14 @@ uses `npx @electron/asar` / `@electron/fuses` in dev (the shipped `.app` bundles
 
 ## Want to add Windows?
 
-This is the biggest open item, and the design is ready for it: `engine/`, `dom/`, `build/`,
-`browser/` and the `helper/` (Node SEA works on Windows) are **already cross-platform** — the
-same payload runs in Claude-for-Windows (also Electron). What's new is a Windows patch
-pipeline (PowerShell; `%LOCALAPPDATA%\AnthropicClaude`; a Scheduled Task instead of launchd)
-and a native GUI. The plan is platform subfolders (`desktop/windows`, `gui/windows`) with the
-shared core untouched. Open an issue first so we can align.
+This is the biggest open item, and there's a full research + design write-up:
+**[docs/WINDOWS.md](docs/WINDOWS.md)**. In short: `engine/`, `dom/`, `build/`, `browser/` and
+the `helper/` (Node SEA works on Windows) are **already cross-platform** — the same payload runs
+in Claude-for-Windows (also Electron). What's new is a Windows patch pipeline, a watcher, and a
+native GUI (WPF), in platform subfolders (`desktop/windows`, `gui/windows`) with the shared core
+untouched. **Heads-up:** Claude for Windows moved to an **MSIX** install (read-only, anti-tamper,
+plus a `cowork-svc` integrity check), which changes the patch model substantially — read
+`docs/WINDOWS.md` §3 and §10 before starting, and open an issue so we can align.
 
 ## Commits & PRs
 

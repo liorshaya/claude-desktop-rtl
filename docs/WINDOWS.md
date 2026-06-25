@@ -1,0 +1,244 @@
+# Windows — research & design (the Windows port)
+
+> Status: **research + design, not yet built.** This is the single source of truth for the
+> Windows port the way [`ARCHITECTURE.md`](ARCHITECTURE.md) is for the shipped macOS + browser
+> work. Nothing here is implemented yet; the open questions in §10 must be answered on a real
+> Windows + real Claude install before any pipeline code is written.
+
+## 1. Goal
+
+Bring the same smooth RTL to **Claude for Windows** (the desktop app) that we already ship on
+macOS — reusing the pure engine unchanged, and adding only the Windows-specific *delivery*
+(patch pipeline, watcher, GUI, installer). `claude.ai` in a Windows browser is **already**
+covered by the existing userscript; this document is about the **desktop app**.
+
+## 2. What is already cross-platform (≈70% of the work, zero change)
+
+The whole bidi brain and its payload are platform-agnostic and run identically inside the
+Windows Electron build:
+
+- `engine/` — pure, DOM-free bidi decisions (unit-tested).
+- `dom/` — the CSS + thin DOM layer.
+- `build/` — inlines engine+dom into one payload IIFE.
+- The injected payload, the `claude-rtl-payload-v1` / `claude-rtl-uidir` idempotency markers,
+  and the **`force-ui-direction=ltr`** window-chrome switch — all identical. `force-ui-direction`
+  is a Chromium switch Electron honours on every platform.
+
+Claude for Windows is **Electron**, and its `app.asar` shares the macOS layout: a main entry
+**`index.pre.js`** (read from `package.json` `"main"`), a `preload.js`, and Vite renderer
+bundles. The injection split is the same: **payload → every renderer bundle; the `ltr` switch
+→ the main entry only** (full payload in main ⇒ black screen, exactly as on macOS).
+
+## 3. The central problem: two install eras (Squirrel vs MSIX)
+
+This is the finding that shapes everything. Anthropic changed the Windows installer on
+**2026-02-10** (alongside Cowork), so there are two regimes with opposite implications:
+
+| | **Squirrel** (legacy, now dead for new installs) | **MSIX** (current) |
+|---|---|---|
+| Install path | `%LOCALAPPDATA%\AnthropicClaude\app-<ver>\` | `C:\Program Files\WindowsApps\Claude_<ver>_x64__pzs8sxrjxfjjc\app\` |
+| Writable by user? | Yes (per-user) | **No** — read-only, ACL-locked to `TrustedInstaller`/`SYSTEM`, OS anti-tamper |
+| Patch in place? | Yes — maps ~1:1 to the macOS model | **Windows blocks launch if any packaged file changes** |
+| asar | `app-<ver>\resources\app.asar` | `…\app\resources\app.asar` |
+| Main exe | `app-<ver>\claude.exe` | `…\app\claude.exe` |
+| Update model | Squirrel `Update.exe`, new `app-<ver>` folder | MSIX auto-update (~weekly, user-context, **no UAC**), new `Claude_<newver>_…_pzs8sxrjxfjjc` folder |
+| Extra integrity gate | — | **`cowork-svc.exe`** — a running service that does its **own** signature/integrity check of `claude.exe` |
+| Per-user data (config/cache) | — | `%LOCALAPPDATA%\Packages\Claude_pzs8sxrjxfjjc\LocalCache\…` (data only, **not** the exe) |
+
+The publisher hash `pzs8sxrjxfjjc` appears stable across versions; the version segment changes
+on every update. arm64 uses `_arm64__pzs8sxrjxfjjc` analogously.
+
+### 3.1 The hard-rule tension (decision required)
+
+Our hard rule is **"never modify the original — patch a copy"** ([`CLAUDE.md`](../CLAUDE.md) §7).
+On macOS that's clean (copy `Claude.app`). On **MSIX it does not translate**: the package is
+registered in place under `WindowsApps`; you cannot run a copied-out MSIX app normally, and the
+install dir is read-only/anti-tamper. The realistic options are all worse than macOS:
+
+1. **Patch in place under `WindowsApps`** — take ownership / stop `cowork-svc`, modify protected
+   files, accept that the "original" is no longer pristine (keep a `.bak` to restore on uninstall).
+   Invasive; may trip Store auto-repair.
+2. **Repackage as a new (self-signed/unsigned) MSIX** — requires admin + trusted-root install;
+   very invasive and fragile.
+3. **Squirrel-only support** — only works for users still on a legacy Squirrel install (a
+   shrinking set; no Squirrel→MSIX migration path exists).
+
+**No option preserves the macOS "untouched original + clean copy" guarantee.** This is a genuine
+product decision to make before building — see §11.
+
+### 3.2 Prior art — the Windows sibling project
+
+[`shraga100/claude-desktop-rtl-patch`](https://github.com/shraga100/claude-desktop-rtl-patch)
+(PowerShell) is effectively this port already, and resolved most unknowns: MSIX ACL handling,
+the asar-hash byte-replace, the `cowork-svc.exe` certificate swap, and a Scheduled-Task watcher.
+**Read it end-to-end on a Windows box before writing our pipeline** — it is the gold reference.
+
+## 4. Pipeline mapped 1:1 to the macOS steps
+
+`desktop/patch.sh` is the source pipeline to port. Drop / keep / change:
+
+| macOS step | Windows | Notes |
+|---|---|---|
+| 1. Copy app → `~/Applications/Claude-RTL.app` | **CHANGE** | MSIX: no clean copy; patch in place under `WindowsApps` (own/stop-svc) + `.bak`. Squirrel: patch the live `app-<ver>` in place. |
+| 2. `@electron/asar` extract | **KEEP** | Pure-Node, cross-platform. Watch: long-path `\\?\` bugs (keep work dir short, e.g. `%TEMP%\crtl`), symlinks-extracted-as-files, **binary-mode** concat (LF-only payload; no CRLF translation or byte counts break). |
+| 3. Inject payload + `ltr` switch | **KEEP** | Identical text/byte op; same markers; same renderer-vs-main split. |
+| 4. `@electron/asar` pack | **KEEP** | Unpacked native glob changes `{**/*.node,**/*.dylib,**/spawn-helper}` → `{**/*.node,**/*.dll}` (+ any Windows helper exe). Verify against the real `app.asar.unpacked`. |
+| 5. Defeat asar integrity (`@electron/fuses` off) | **CHANGE** | See §5. Primary: recompute the asar header SHA-256 and **byte-replace** the old ASCII hash inside `claude.exe`; fuse-off only as fallback. May be a **no-op** if integrity is disabled in Claude's build — verify first. |
+| 6. Ad-hoc re-sign (REQUIRED on macOS) | **DROP** (mostly) | Windows does **not** re-verify Authenticode at launch — a modified `claude.exe` still runs. But the app-level gates in §5 replace that burden, and Cowork's `cowork-svc.exe` may need handling. |
+| 7. launchd watcher | **CHANGE** | See §7 — `FileSystemWatcher` in the tray app + logon persistence; Scheduled Task as backstop. |
+| Node SEA helper | **KEEP (rebuild)** | See §8 — Windows SEA `.exe`, add a `hashreplace` command. |
+
+## 5. Integrity & signing on Windows
+
+Three gates, none of them the OS loader:
+
+1. **Electron asar-integrity fuse** (`EnableEmbeddedAsarIntegrityValidation`). On Windows the
+   asar header hash is stored as a PE resource (type `Integrity`, name `ElectronAsar`) in
+   `claude.exe`, and in practice also as a plain ASCII hex string. If enabled and the hash
+   mismatches, Electron **force-terminates**.
+   - **Primary strategy:** recompute SHA-256 of the *new* asar header and **byte-replace** the
+     old lowercase-hex ASCII string in `claude.exe` (same length ⇒ offsets stay stable; validate
+     the located string is unique and identical-length before writing). This keeps integrity
+     *passing* against our modified asar and needs **no fuse flip**.
+   - **Fallback:** `@electron/fuses write --app claude.exe EnableEmbeddedAsarIntegrityValidation=off`
+     (the fuse wire lives in the PE; the lib supports Windows binaries).
+   - **Possible no-op:** Electron's default is integrity *off*. If Claude's Windows build doesn't
+     enable it, skip §5 entirely. **Verify on a real install.**
+2. **`cowork-svc.exe`** — a Cowork service that verifies `claude.exe` itself. The PoC found it
+   necessary to swap Anthropic's embedded cert in `cowork-svc.exe` for a self-signed one, re-sign,
+   add that cert to the **Trusted Root** store, then wipe the key — very invasive (touches the
+   machine trust store). **Strongly prefer leaving `cowork-svc.exe` untouched** and testing
+   whether Cowork still works when only `claude.exe` + `app.asar` change. This is the Windows
+   analogue of our macOS "preserve entitlements so Cowork keeps working" rule.
+3. **OS Authenticode** — not checked at launch (no Gatekeeper equivalent). Confirmed: a tampered,
+   invalid-signature local exe runs. So **re-signing is dropped** — the work moves to gates 1–2.
+
+> Context, not a blocker: CVE-2025-55305 (asar-integrity bypass on Windows, Electron < 35.7.5 /
+> < 36.8.1 / < 37.3.1) is why the resource-based check exists; it doesn't change our approach
+> (we're the legitimate local user patching our own install).
+
+## 6. The GUI (the SwiftUI menu-bar app's Windows twin)
+
+**Recommendation: WPF on .NET 8/9 + H.NotifyIcon.Wpf + an in-process watcher, published as a
+single self-contained `win-x64` exe.** Free toolchain, no Visual Studio, no admin.
+
+- **Framework — WPF.** In-box with the .NET SDK, builds with just the `dotnet` CLI, mature,
+  acceptable Win11 theming, XAML/MVVM ≈ SwiftUI's declarative+bindings model. WinUI 3 was
+  rejected (no built-in tray, awkward single-file, Windows App SDK runtime dependency); WinForms
+  is the strong runner-up (built-in `NotifyIcon`, bulletproof single-file, dated visuals);
+  Avalonia only wins if we wanted a shared cross-platform UI, which we don't (macOS is SwiftUI).
+- **Tray + popover — [H.NotifyIcon.Wpf](https://github.com/HavenDV/H.NotifyIcon)** (the maintained
+  successor to `hardcodet/wpf-notifyicon`). A `TaskbarIcon` + a borderless `Window`/`Popup` shown
+  anchored to the tray on click reproduces the `NSStatusItem` + popover UX.
+- **`LSUIElement` equivalent (tray-only, no taskbar/Alt-Tab):** no `MainWindow` at startup;
+  status window `ShowInTaskbar="false"`, `WindowStyle="None"`, shown only on tray click;
+  `ShutdownMode="OnExplicitShutdown"`; dispose the tray icon on exit (no ghost icon).
+- **Publish:** `dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
+  -p:EnableCompressionInSingleFile=true -p:PublishTrimmed=false`. **Leave trimming off** — WPF +
+  single-file + trimming has historical launch-crash bugs; single-file alone is fine on .NET 8/9
+  (validate the published exe on a clean VM early).
+- **Secrets/state:** prefer storing **nothing** (derive state by inspecting the install dir +
+  the presence of the logon entry). If a small key/flag is needed, **DPAPI**
+  (`ProtectedData`, `DataProtectionScope.CurrentUser`) — in-box, per-user, no library — written
+  under `%LOCALAPPDATA%\claude-rtl\`. (Credential Manager is the closer Keychain analogue but
+  needs P/Invoke for no real benefit at our scale.)
+
+## 7. The watcher (launchd → Windows)
+
+Claude auto-updates by creating a new version folder (MSIX `Claude_<newver>_…` or Squirrel
+`app-<ver>`), wiping our patch. Re-apply by detecting that and re-running the pipeline.
+
+- **Recommended: `FileSystemWatcher` inside the already-running tray process.** It's alive in the
+  user session with exactly the right permissions to touch the user's own Claude install. Watch
+  the parent dir for a new version folder (`Created`), **debounce** (an update writes many files —
+  wait for it to settle, like the macOS "wait for ShipIt" rule), then invoke the helper to
+  re-patch. Handle the `Error` event / buffer overflow by re-checking the installed version, and
+  also re-verify the patch whenever the popup opens (cheap backstop).
+- **Logon persistence (the LaunchAgent analogue):** a per-user **Startup-folder shortcut** or
+  `HKCU\…\Run` entry launching the tray exe with a silent `--watch` flag — **per-user, no admin**.
+  The "Keep RTL after updates" toggle just adds/removes this entry.
+- **Scheduled Task** is only a backstop: Task Scheduler can't truly watch a folder (no reliable
+  creation event under `%LOCALAPPDATA%`/`WindowsApps`), so it degrades to interval polling. A
+  Windows Service is the wrong privilege (session 0 / admin) — rejected.
+
+## 8. The helper (Node SEA on Windows)
+
+Keep the proven Node asar/fuses code; don't reimplement it in .NET.
+
+- **Node SEA → Windows `.exe`** is the blessed mechanism: bundle the libs into one CJS file with
+  esbuild, generate the SEA blob, inject it as the `NODE_SEA_BLOB` PE resource via **`postject`**
+  (Node v24+ folds this into `--build-sea`). The `assets` field can embed the prebuilt RTL
+  **payload inside the helper exe** itself.
+- **Add a `hashreplace` subcommand** (compute asar-header SHA-256 + byte-replace in `claude.exe`)
+  for §5. Mirror `helper/build-helper.sh` as `build-helper.ps1` producing `claude-rtl-helper.exe`.
+- The WPF app (or a PowerShell wrapper) shells out to the helper — **no system Node required**,
+  exactly like macOS.
+
+## 9. Distribution (the `.dmg` + Gatekeeper-bypass twin)
+
+**Free path: an Inno Setup per-user installer (`PrivilegesRequired=lowest`) → `%LOCALAPPDATA%`,
+no admin, plus a portable `.zip` fallback. Unsigned.** Users do the one-time
+**SmartScreen → "More info" → "Run anyway"** (or right-click → Properties → **Unblock**) — the
+exact analogue of the macOS Gatekeeper bypass. Building from source avoids it entirely (no
+Mark-of-the-Web `Zone.Identifier` stream ⇒ no SmartScreen gate).
+
+- **Installer choice:** Inno Setup (free) does per-user + register the logon/Scheduled-Task entry
+  + drop the bundled helper/payload in one simple script. NSIS is heavier; WiX/MSI is overkill;
+  **MSIX is disqualified** for the free path — it *must* be signed and trusted to install (a
+  self-signed MSIX needs the cert in the machine Trusted-People store = **admin**).
+- **Signing reality (important asymmetry vs macOS):** on Windows even a **paid** cert does **not**
+  silence SmartScreen immediately — Microsoft removed EV's instant-reputation status in 2024;
+  reputation now builds per-file-hash and resets each release. So paid signing buys little for a
+  hobby project. The only worthwhile path is **free**: [SignPath Foundation](https://signpath.org/)
+  OSS signing, if the project qualifies. Otherwise stay unsigned + document the bypass. (Contrast
+  macOS, where paid notarization *does* silence Gatekeeper — there the free path is the compromise;
+  on Windows the free path is genuinely competitive.)
+- **Channel:** GitHub Releases (same as macOS) — attach the Inno `.exe` + portable `.zip` +
+  SHA-256 checksums. Warn about unsigned-installer AV/Defender false positives; offer the
+  build-from-source escape hatch.
+
+## 10. Open questions — verify on a real Windows + real Claude (do this first)
+
+1. **Install model on the target machine — MSIX or Squirrel?** Decides feasibility and whether the
+   "patch a copy" rule can survive at all. Check `C:\Program Files\WindowsApps\Claude_*` vs
+   `%LOCALAPPDATA%\AnthropicClaude\app-*`.
+2. **Are the asar-integrity fuses actually enabled** in Claude's Windows build? If not, §5 is a
+   no-op. Read the `Integrity`/`ElectronAsar` PE resource + the fuse wire in `claude.exe`.
+3. **What exactly does `cowork-svc.exe` check, and can we leave it untouched** (only modify
+   `claude.exe` + `app.asar`) and still have Cowork work? Avoiding the cert-swap/trusted-root dance
+   is the difference between "reasonable" and "too invasive to ship."
+4. **Does modifying `WindowsApps` flag the MSIX as tampered** and trigger Store auto-repair that
+   reverts the patch independent of version bumps?
+5. **Exact current main-entry filename & renderer tree** inside the asar for the current build
+   (`index.pre.js` may have changed; confirm `.vite/build/*.js`).
+6. **`app.asar.unpacked`** contents (native modules) on Windows.
+7. **SmartScreen / Defender** reaction to the now-invalid `claude.exe` signature on launch
+   (expected fine; scan during testing).
+
+## 11. Phased plan (proposed P7+)
+
+1. **P7.0 — Spike on real Windows.** Answer §10 on an actual machine. Read the shraga100 PoC.
+   Decide the §3.1 "touch the original" policy. *No shipping code until this is done.*
+2. **Immediate coverage — the browser userscript** already gives Windows users RTL on `claude.ai`
+   today, zero risk. Make sure it's documented for Windows.
+3. **P7.1 — Windows patch pipeline.** Port `patch.sh` → `patch.ps1` (or the helper): asar
+   extract/inject/pack (keep), hash byte-replace (new), MSIX in-place handling (new), no re-sign.
+4. **P7.2 — Helper.** `claude-rtl-helper.exe` via Node SEA + `hashreplace`.
+5. **P7.3 — Watcher.** `FileSystemWatcher` + logon persistence.
+6. **P7.4 — GUI.** WPF + H.NotifyIcon tray app wrapping the helper, mirroring `gui/`.
+7. **P7.5 — Distribution.** Inno Setup per-user + portable zip; unsigned; SmartScreen docs;
+   pursue SignPath Foundation.
+
+Layout follows [`CONTRIBUTING.md`](../CONTRIBUTING.md): platform subfolders (`desktop/windows`,
+`gui/windows`) with the shared core (`engine/`, `dom/`, `build/`, `helper/`) untouched.
+
+## 12. Sources
+
+- Prior art: [shraga100/claude-desktop-rtl-patch](https://github.com/shraga100/claude-desktop-rtl-patch)
+- [Deploy Claude Desktop for Windows](https://support.claude.com/en/articles/12622703-deploy-claude-desktop-for-windows) · [Squirrel→MSIX transition #25162](https://github.com/anthropics/claude-code/issues/25162)
+- Electron: [asar integrity](https://www.electronjs.org/docs/latest/tutorial/asar-integrity) · [fuses](https://www.electronjs.org/docs/latest/tutorial/fuses) · [code signing](https://www.electronjs.org/docs/latest/tutorial/code-signing) · [@electron/asar](https://github.com/electron/asar) · [CVE-2025-55305](https://github.com/advisories/GHSA-vmqv-hx8q-j7mg)
+- MSIX: [behind the scenes](https://learn.microsoft.com/en-us/windows/msix/desktop/desktop-to-uwp-behind-the-scenes) · [limitations](https://www.turbo.net/blog/posts/2025-06-16-understanding-msix-limitations-enterprise-application-compatibility) · [unsigned package](https://learn.microsoft.com/en-us/windows/msix/package/unsigned-package)
+- Node: [Single Executable Applications](https://nodejs.org/api/single-executable-applications.html)
+- GUI: [H.NotifyIcon](https://github.com/HavenDV/H.NotifyIcon) · [single-file deployment](https://learn.microsoft.com/en-us/dotnet/core/deploying/single-file/overview) · [WPF single-file bug #4216](https://github.com/dotnet/wpf/issues/4216) · [DPAPI ProtectedData](https://learn.microsoft.com/en-us/dotnet/standard/security/how-to-use-data-protection)
+- Distribution/signing: [Code signing options (MS, Apr 2026)](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/code-signing-options) · [Trusted/Artifact Signing pricing](https://azure.microsoft.com/en-us/pricing/details/artifact-signing/) · [Inno Setup PrivilegesRequired](https://jrsoftware.org/ishelp/topic_setup_privilegesrequired.htm) · [SignPath Foundation](https://signpath.org/)
+- `force-ui-direction`: [Chromium PSA](https://groups.google.com/a/chromium.org/g/chromium-dev/c/jfFdtQ4Lc_w)
