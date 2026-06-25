@@ -5,9 +5,9 @@
 <p align="center">
   <img src="assets/language/btn-english-active.svg" alt="English" height="36">
   &nbsp;
-  <a href="README.he.md"><img src="assets/language/btn-hebrew.svg" alt="עברית" height="36"></a>
+  <a href="docs/README.he.md"><img src="assets/language/btn-hebrew.svg" alt="עברית" height="36"></a>
   &nbsp;
-  <a href="README.ar.md"><img src="assets/language/btn-arabic.svg" alt="العربية" height="36"></a>
+  <a href="docs/README.ar.md"><img src="assets/language/btn-arabic.svg" alt="العربية" height="36"></a>
 </p>
 
 <p align="center">
@@ -103,14 +103,14 @@ desktop/patch.sh --uninstall    # remove the copy (original untouched)
 
 The browser already runs a complete Unicode Bidi Algorithm. We don't reimplement it — we make the **direction & isolation decisions** and let the renderer reorder. CSS `unicode-bidi: plaintext` per leaf block is the sole base-direction mechanism for prose, so every block self-determines and the container is never force-flipped. The desktop app injects the same engine into Claude's renderer bundles and flips only the window-chrome direction in the main process.
 
-Full design: **[ARCHITECTURE.md](ARCHITECTURE.md)**.
+Full design: **[ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 
 ## ⚠️ Limitations (v1)
 
 - **Real code blocks stay LTR** (deliberate — RTL scrambles braces, indentation, operators).
 - **Desktop Artifacts** render in a cross-origin iframe the desktop payload can't enter yet (the browser userscript does cover them).
 - **No bundled Hebrew font yet** — macOS already renders Hebrew via system fonts.
-- See **[ARCHITECTURE.md §15](ARCHITECTURE.md)** for the full list.
+- See **[ARCHITECTURE.md §15](docs/ARCHITECTURE.md)** for the full list.
 
 ## 🗺️ Roadmap
 

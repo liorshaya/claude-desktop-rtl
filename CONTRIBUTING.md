@@ -16,8 +16,8 @@ run. Below is everything you need.
 | `helper/` | `@electron/asar` + `@electron/fuses` compiled to a standalone Node SEA binary | build-time |
 | `gui/` | The SwiftUI menu-bar app that wraps the pipeline | macOS |
 
-**`ARCHITECTURE.md` is the single source of truth.** Read the relevant `§` before non-trivial
-work. `ROADMAP.md` tracks the build phases.
+**`docs/ARCHITECTURE.md` is the single source of truth.** Read the relevant `§` before
+non-trivial work. `docs/ROADMAP.md` tracks the build phases.
 
 ## The hard rules (please don't break these)
 

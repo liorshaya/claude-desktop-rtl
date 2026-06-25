@@ -1,7 +1,7 @@
 # claude-rtl — project memory
 
 Smooth RTL (Hebrew/Arabic/Persian) for Claude Desktop (macOS) + claude.ai,
-from one pure engine. **Read `ARCHITECTURE.md` before any non-trivial work — it is
+from one pure engine. **Read `docs/ARCHITECTURE.md` before any non-trivial work — it is
 the single source of truth.** Section refs (§) point to it.
 
 ## Hard rules (never violate)
@@ -27,6 +27,6 @@ the single source of truth.** Section refs (§) point to it.
 - Small commits, one logical change each. One branch per phase.
 
 ## Workflow
-- Phases P0–P6 live in `ROADMAP.md` (not here). One phase per branch.
+- Phases P0–P6 live in `docs/ROADMAP.md` (not here). One phase per branch.
 - Propose a plan before writing code; I review the diff before merge.
 - P0 is tests-first: turn the §13 corpus into failing `node --test` cases, then green.

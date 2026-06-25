@@ -1,13 +1,13 @@
 <p align="center">
-  <img src="assets/claude-desktop-rtl-banner.svg" alt="Claude Desktop RTL" width="100%">
+  <img src="../assets/claude-desktop-rtl-banner.svg" alt="Claude Desktop RTL" width="100%">
 </p>
 
 <p align="center">
-  <a href="README.md"><img src="assets/language/btn-english.svg" alt="English" height="36"></a>
+  <a href="../README.md"><img src="../assets/language/btn-english.svg" alt="English" height="36"></a>
   &nbsp;
-  <img src="assets/language/btn-hebrew-active.svg" alt="עברית" height="36">
+  <img src="../assets/language/btn-hebrew-active.svg" alt="עברית" height="36">
   &nbsp;
-  <a href="README.ar.md"><img src="assets/language/btn-arabic.svg" alt="العربية" height="36"></a>
+  <a href="README.ar.md"><img src="../assets/language/btn-arabic.svg" alt="العربية" height="36"></a>
 </p>
 
 <p align="center">
@@ -116,10 +116,10 @@ desktop/patch.sh --uninstall    # הסרת העותק (המקורי לא נגע)
 
 ## 🤝 תרומה
 
-PRs יתקבלו בשמחה — זה open source. ראה **[CONTRIBUTING.md](CONTRIBUTING.md)**, וכש‑Claude משנה את ה‑DOM שלו, ה‑**[runbook לאימוץ גרסת Claude חדשה](docs/RUNBOOK-adopt-new-claude-version.md)** מראה בדיוק איך לעדכן את ה‑selectors.
+PRs יתקבלו בשמחה — זה open source. ראה **[CONTRIBUTING.md](../CONTRIBUTING.md)**, וכש‑Claude משנה את ה‑DOM שלו, ה‑**[runbook לאימוץ גרסת Claude חדשה](RUNBOOK-adopt-new-claude-version.md)** מראה בדיוק איך לעדכן את ה‑selectors.
 
 ## 📄 רישיון
 
-[MIT](LICENSE) © Lior Shaya
+[MIT](../LICENSE) © Lior Shaya
 
 </div>
