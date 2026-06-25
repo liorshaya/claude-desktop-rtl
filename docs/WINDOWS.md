@@ -1,9 +1,10 @@
 # Windows — research & design (the Windows port)
 
-> Status: **research + design, not yet built.** This is the single source of truth for the
-> Windows port the way [`ARCHITECTURE.md`](ARCHITECTURE.md) is for the shipped macOS + browser
-> work. Nothing here is implemented yet; the open questions in §10 must be answered on a real
-> Windows + real Claude install before any pipeline code is written.
+> Status: **P7.0 done — diagnostics verified on a real Squirrel install (2026-06-25); the
+> pipeline (P7.1) is next.** This is the single source of truth for the Windows port the way
+> [`ARCHITECTURE.md`](ARCHITECTURE.md) is for the shipped macOS + browser work. The §10 open
+> questions are answered for the **Squirrel** path in §10.1; the **MSIX** path stays deferred
+> (no MSIX machine to verify on yet).
 
 ## 1. Goal
 
@@ -65,6 +66,13 @@ install dir is read-only/anti-tamper. The realistic options are all worse than m
 
 **No option preserves the macOS "untouched original + clean copy" guarantee.** This is a genuine
 product decision to make before building — see §11.
+
+**Decision (2026-06-25, Squirrel path):** option 1 — **patch in place + `.bak` backup**. The verified
+machine is Squirrel (user-writable, no Cowork), and Squirrel discards the whole `app-<ver>` folder on
+every update, so the "pristine original" guarantee is largely moot; the watcher re-applies after each
+update. The macOS "patch a copy" hard rule is therefore **relaxed for the Squirrel path** (back up
+`claude.exe` + `app.asar` to `.crtl-bak` so the user can restore). The **MSIX** policy stays open
+(deferred until there is an MSIX box to verify on).
 
 ### 3.2 Prior art — the Windows sibling project
 
@@ -214,6 +222,45 @@ Mark-of-the-Web `Zone.Identifier` stream ⇒ no SmartScreen gate).
 6. **`app.asar.unpacked`** contents (native modules) on Windows.
 7. **SmartScreen / Defender** reaction to the now-invalid `claude.exe` signature on launch
    (expected fine; scan during testing).
+
+### 10.1 Results — verified 2026-06-25 (real Squirrel install, `app-1.15200.0`)
+
+Run of [`diagnose.ps1`](../desktop/windows/diagnose.ps1) on Win11 (PowerShell 5.1, AMD64),
+Claude `1.15200.0`:
+
+| # | Question | Answer |
+|---|---|---|
+| Q1 | Install model | **Squirrel** — `%LOCALAPPDATA%\AnthropicClaude\app-1.15200.0` (not MSIX) |
+| Q4 | App dir writable? | **Yes** — owner `SHAYA\lior1`, full control, no admin |
+| Q2 | asar-integrity fuse | **Enabled** (`EnableEmbeddedAsarIntegrityValidation` + `OnlyLoadAppFromAsar`) — §5 is real, not a no-op |
+| Q3 | `cowork-svc.exe` | **Absent** — no Cowork service/proc; the §5 gate-2 cert dance is N/A here |
+| Q7 | `claude.exe` signature | **Valid** (CN=Anthropic, PBC) — but not re-checked at launch ⇒ re-sign dropped |
+| Q5 | main entry | **`.vite/build/index.pre.js`** (unchanged from the macOS assumption) |
+| Q5 | renderer bundles | 15 under `.vite/build/*.js` (aboutWindow, buddy, claudePagePreview, computerUseTeach, coworkArtifact, findInPage, index, index.pre, mainView, mainWindow, mcp-runtime/{directMcpHost,nodeHost}, quickWindow, shell-path-worker/shellPathWorker, transcript-search-worker/transcriptSearchWorker) |
+| Q6 | `app.asar.unpacked` | 5 native: `@ant/claude-native/*.node`, `node-pty/prebuilds/win32-x64/*.node`, `office365-mcp/msal-node-runtime.node` + `msalruntime.dll` ⇒ unpack glob `{**/*.node,**/*.dll}` confirmed |
+
+**Consequences for the pipeline (Squirrel path):**
+
+- **Integrity → mirror macOS:** flip `EnableEmbeddedAsarIntegrityValidation=off` via `@electron/fuses`
+  (exactly what [`patch.sh`](../desktop/patch.sh) does). The ASCII hash byte-scan was inconclusive
+  (`ElectronAsar` / `"alg":"sha256"` not found as ASCII — likely a UTF-16 PE resource), but **fuse-off
+  sidesteps byte-replace entirely**, so §5's "primary" (byte-replace the hash) is demoted to an
+  unused fallback on this path.
+- **Drop** the macOS re-sign step (Q7) and **all** Cowork handling (Q3) — fewer steps than macOS.
+- **Pipeline =** extract → inject (payload → renderer bundles; `force-ui-direction=ltr` →
+  `index.pre.js` only, per §2) → pack (`--unpack {**/*.node,**/*.dll}`) → fuse-off — **in place**, with
+  `.crtl-bak` of `claude.exe` + `app.asar`.
+- **Still open (MSIX only, deferred):** §10 Q3-detail and Q4 (WindowsApps tamper / Store auto-repair).
+  N/A on this Squirrel box.
+- Tooling present: Node v24.13.1, npx OK; `@electron/fuses read` succeeded on this `claude.exe`
+  (so `write` will too).
+
+> **diagnose.ps1 fix applied alongside this run:** the script carried non-ASCII characters (em-dash,
+> `§`). Windows PowerShell 5.1 reads a BOM-less `.ps1` as Windows-1252, and the em-dash's third byte
+> (`0x94`) decodes to a curly close-quote that PowerShell treats as a string terminator — so the
+> script failed to *parse* before inspecting anything. It is now ASCII-clean. **Lesson for P7.1+:**
+> keep all PowerShell ASCII-only, and do byte-exact asar injection in Node (LF-only, no BOM), not in
+> PowerShell string ops.
 
 ## 11. Phased plan (proposed P7+)
 
