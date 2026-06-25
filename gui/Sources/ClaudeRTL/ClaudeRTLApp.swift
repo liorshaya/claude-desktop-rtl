@@ -137,11 +137,25 @@ struct ContentView: View {
     }
 
     // MARK: - Actions
+    // The primary button is always the most relevant next action for the current state.
+    private enum Primary { case install, update, open }
+    private var primary: Primary {
+        if !s.patchedInstalled { return .install }
+        return needsUpdate ? .update : .open
+    }
+
     private var primaryButton: some View {
-        Button {
-            Task { await runner.install() }
+        let label: (String, String) = {
+            switch primary {
+            case .install: return ("Install RTL", "arrow.down.circle.fill")
+            case .update:  return ("Update RTL", "arrow.clockwise")
+            case .open:    return ("Open Claude-RTL", "play.fill")
+            }
+        }()
+        return Button {
+            Task { primary == .open ? await runner.openPatched() : await runner.install() }
         } label: {
-            Label(primaryTitle, systemImage: s.patchedInstalled ? "arrow.clockwise" : "arrow.down.circle.fill")
+            Label(label.0, systemImage: label.1)
         }
         .buttonStyle(BrandButton())
         .disabled(runner.busy)
@@ -149,16 +163,18 @@ struct ContentView: View {
 
     private var secondaryRow: some View {
         HStack {
-            Button { Task { await runner.openPatched() } } label: { Label("Open", systemImage: "play.fill") }
-                .disabled(!s.patchedInstalled || runner.busy)
-            Spacer()
             if s.patchedInstalled {
-                Button(role: .destructive) { Task { await runner.uninstall() } } label: {
-                    Label("Uninstall", systemImage: "trash")
-                }.disabled(runner.busy)
+                if primary == .open {
+                    // Already installed + current → the rare repair action lives here, quietly.
+                    Button { Task { await runner.install() } } label: { Label("Re-apply", systemImage: "arrow.clockwise") }
+                } else {
+                    Button { Task { await runner.openPatched() } } label: { Label("Open", systemImage: "play.fill") }
+                }
+                Spacer()
+                Button(role: .destructive) { Task { await runner.uninstall() } } label: { Label("Uninstall", systemImage: "trash") }
             }
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(.bordered).disabled(runner.busy)
     }
 
     private var workingRow: some View {
@@ -198,9 +214,6 @@ struct ContentView: View {
     }
 
     // MARK: - Helpers
-    private var primaryTitle: String {
-        s.patchedInstalled ? (needsUpdate ? "Update RTL" : "Reinstall RTL") : "Install RTL"
-    }
     private var watchBinding: Binding<Bool> {
         Binding(get: { s.watcherActive }, set: { v in Task { await runner.setWatch(v) } })
     }
