@@ -274,7 +274,10 @@ Claude `1.15200.0`:
    asar extract/inject/pack kept; integrity via **fuse-off** (not byte-replace); in-place Squirrel
    (MSIX deferred); no re-sign. Verified on `app-1.15200.0`: Hebrew renders RTL.
 4. **P7.2 — Helper.** `claude-rtl-helper.exe` via Node SEA + `hashreplace`.
-5. **P7.3 — Watcher.** `FileSystemWatcher` + logon persistence.
+5. **P7.3 — Watcher. [DONE 2026-06-25]** `watch.ps1` (`FileSystemWatcher` on the AnthropicClaude dir
+   + settle wait + a **read-only** marker check, so it never stops an already-patched Claude) plus
+   per-user logon persistence via `patch.ps1 -Watch` / `-Unwatch`. Validated with a simulated update
+   + persistence tests.
 6. **P7.4 — GUI.** WPF + H.NotifyIcon tray app wrapping the helper, mirroring `gui/`.
 7. **P7.5 — Distribution.** Inno Setup per-user + portable zip; unsigned; SmartScreen docs;
    pursue SignPath Foundation.

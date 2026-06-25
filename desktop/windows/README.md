@@ -43,9 +43,23 @@ Hebrew/Arabic/Persian render RTL.
 > Only the legacy **Squirrel** install is supported today (the common case for existing users).
 > **MSIX** (new installs since 2026-02-10) is not yet handled — see [../../docs/WINDOWS.md](../../docs/WINDOWS.md) §3.
 
+## Step 3 (optional): survive Claude updates
+
+Claude auto-updates into a **new** `app-<ver>` folder, which wipes the patch. Install the watcher
+once and it re-applies RTL automatically after each update:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\desktop\windows\patch.ps1 -Watch     # enable
+powershell -ExecutionPolicy Bypass -File .\desktop\windows\patch.ps1 -Unwatch   # disable
+```
+
+`-Watch` adds a per-user logon entry and starts `watch.ps1` now; it waits for an update to settle,
+then re-patches. It checks "already patched?" read-only, so it never disturbs a running, patched
+Claude. Logs: `%LOCALAPPDATA%\claude-rtl\watch.log`.
+
 ## Later (per docs/WINDOWS.md §11)
 
-The Node-SEA `claude-rtl-helper.exe` (P7.2), the `FileSystemWatcher` auto-reapply watcher (P7.3), the
-WPF tray GUI `gui/windows` (P7.4), and the Inno Setup per-user installer (P7.5).
+The Node-SEA `claude-rtl-helper.exe` (no system Node needed; P7.2), the WPF tray GUI `gui/windows`
+(P7.4), and the Inno Setup per-user installer (P7.5).
 
 Prior art to mine: [shraga100/claude-desktop-rtl-patch](https://github.com/shraga100/claude-desktop-rtl-patch).
