@@ -70,19 +70,26 @@ Build:
 Done when:
 - Artifacts and Cowork render RTL correctly; the bundled font shows Hebrew glyphs.
 
-## P6 — v1.0   [TODO]
-Branch: `p6-release`
+## P6 — v1.0   [DONE]
+Branch: `p6-release` (merged to `main`)
 Context Required: `ARCHITECTURE.md` §13, §14
 Build:
-- Corpus screenshot gallery; bilingual (he/en) README; contribution guide;
+- Corpus screenshot gallery; bilingual (he/en/ar) README; contribution guide;
   "adopt a new Claude version" runbook
 Done when:
-- A non-technical user can install from the README and get smooth RTL.
+- A non-technical user can install from the README and get smooth RTL. ✅
+Notes:
+- README (en + he + ar with language switcher), LICENSE (MIT), CONTRIBUTING,
+  and `docs/RUNBOOK-adopt-new-claude-version.md` shipped.
+- Screenshot gallery still pending real images (`assets/screenshots/`).
 
 ---
 
-## Distribution & GUI (later — see §14 / chat notes)
-A menu-bar SwiftUI app that wraps `patch.sh` / `watch.sh`, plus a single standalone
-binary for `@electron/asar` + `@electron/fuses` (Node SEA or `bun build --compile`) to
-drop the Node dependency, plus a Developer-ID-signed + notarized `.dmg` installer
-(Apple Developer Program, $99/yr). Tackle only after P0–P4 are solid.
+## Distribution & GUI   [DONE]
+Built: a menu-bar SwiftUI app (`gui/`) that wraps `patch.sh` / `watch.sh`, plus a
+standalone Node-SEA helper for `@electron/asar` + `@electron/fuses` — the shipped
+`.app` needs neither system Node nor a checked-out repo. Ad-hoc signed (no $99
+Developer ID): users build from source (`cd gui && ./build.sh`), which sidesteps
+Gatekeeper. A user-initiated "Check for updates" reads the repo `VERSION` (the
+project's only network call, manager-only).
+Deferred (nice-to-have): Developer-ID-signed + notarized `.dmg`; onboarding window.
