@@ -33,6 +33,9 @@ chmod +x "$RES/claude-rtl-helper" "$RES/scripts/"*.sh
 # Menu-bar status icon (template PNGs → monochrome, adapts to light/dark menu bar).
 cp "$REPO/assets/claude-rtl-statusTemplate.png" "$REPO/assets/claude-rtl-statusTemplate@2x.png" "$RES/"
 
+# App icon (Finder/Cmd-Tab) — regenerate with gui/icon/build-icon.sh when the design changes.
+cp "$SCRIPT_DIR/icon/AppIcon.icns" "$RES/AppIcon.icns"
+
 # Single source of version truth — the repo's VERSION file (also what "Check for updates" reads).
 VERSION="$(tr -d ' \t\n' < "$REPO/VERSION" 2>/dev/null || echo 0.0.0)"
 cat > "$APP/Contents/Info.plist" <<PLIST
@@ -44,6 +47,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleDisplayName</key><string>Claude RTL</string>
   <key>CFBundleIdentifier</key><string>com.claude-rtl.manager</string>
   <key>CFBundleExecutable</key><string>ClaudeRTL</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>${VERSION}</string>
   <key>CFBundleVersion</key><string>1</string>
