@@ -20,6 +20,8 @@ param(
   [switch]$Status,
   [switch]$Watch,    # install the per-user logon watcher (auto-reapply after a Claude update)
   [switch]$Unwatch,  # remove the logon watcher
+  [switch]$NoStop,   # do NOT stop a running Claude (watcher use): patch the new version in place;
+                     # RTL applies on next launch - never force-kills the user's session
   [switch]$Force     # stop a running Claude without an extra notice
 )
 $ErrorActionPreference = 'Stop'
@@ -126,7 +128,7 @@ try {
   }
 
   # --- APPLY ---
-  if (Test-Path $Preflight) {
+  if (-not $NoStop -and (Test-Path $Preflight)) {
     & powershell -NoProfile -ExecutionPolicy Bypass -File $Preflight
     if ($LASTEXITCODE -ne 0) { Die "preflight reported a blocker - aborting (see [FAIL] lines above)." }
   }
@@ -139,7 +141,7 @@ try {
   if (-not (Test-Path $Payload)) { Die "payload not found at $Payload." }
   if (-not (Select-String -Path $Payload -Pattern $Marker -SimpleMatch -Quiet)) { Die "payload missing marker $Marker - build looks wrong." }
 
-  Stop-Claude
+  if (-not $NoStop) { Stop-Claude }
 
   # backup (never overwrite a pristine backup with an already-patched file)
   $exeBak = "$($ins.Exe).crtl-bak"; $asarBak = "$($ins.Asar).crtl-bak"

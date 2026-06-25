@@ -85,17 +85,36 @@ function Wait-Settle($appDir){
   return $false
 }
 
+function Test-Locked($path){
+  # Non-destructive lock test: try an exclusive open. If Claude is running THIS version the file is
+  # held open and this throws -> locked. Open+close only, never writes a byte.
+  if (-not (Test-Path $path)) { return $false }
+  try { $fs = [IO.File]::Open($path, 'Open', 'ReadWrite', 'None'); $fs.Close(); return $false }
+  catch { return $true }
+}
+
 function Invoke-CheckAndPatch {
   $app = Get-HighestApp
   if (-not $app) { Log "no Claude install found under $Base."; return }
-  if (Test-Patched $app) { return }   # already patched -> do nothing (never stops Claude)
+  if (Test-Patched $app) { return }   # already patched -> do nothing (never touches Claude)
   Log "unpatched install detected: $($app.Name) - waiting for the update to settle..."
   if (-not (Wait-Settle $app)) { Log "update did not settle in time; will retry on the next check."; return }
-  if ($DryRun) { Log "[DryRun] settled - would run patch.ps1 for $($app.Name)."; return }
-  Log "settled. running patch.ps1..."
-  & powershell -NoProfile -ExecutionPolicy Bypass -File $PatchPs1 -Force | ForEach-Object { Log "  $_" }
-  if (Test-Patched (Get-HighestApp)) { Log "re-patched OK ($($app.Name)). RTL restored." }
-  else { Log "re-patch FAILED - run patch.ps1 manually." }
+  if ($DryRun) { Log "[DryRun] settled - would run patch.ps1 -NoStop for $($app.Name)."; return }
+
+  # If Claude is already running FROM the new version, its files are locked and patching would have
+  # to force-kill it (which would crash anything inside, e.g. a Claude Code session). We never do
+  # that: defer and retry. RTL then applies the next time Claude is closed and reopened.
+  $asar = Join-Path $app.FullName 'resources\app.asar'
+  $exe  = Join-Path $app.FullName 'claude.exe'
+  if ((Test-Locked $asar) -or (Test-Locked $exe)) {
+    Log "settled, but $($app.Name) is in use (Claude is running the new version) - deferring; RTL applies after Claude is next closed. Will retry."
+    return
+  }
+
+  Log "settled and unlocked. running patch.ps1 -NoStop (no force-kill)..."
+  & powershell -NoProfile -ExecutionPolicy Bypass -File $PatchPs1 -NoStop | ForEach-Object { Log "  $_" }
+  if (Test-Patched (Get-HighestApp)) { Log "re-patched OK ($($app.Name)). RTL restored (takes effect on next Claude launch)." }
+  else { Log "re-patch did not complete - will retry on the next check." }
 }
 
 # --- startup catch-up (covers: watcher started after an update happened while it was off) ---
