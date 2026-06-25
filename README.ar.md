@@ -3,7 +3,11 @@
 </p>
 
 <p align="center">
-  <a href="README.md">English</a> &nbsp;·&nbsp; <a href="README.he.md">עברית</a> &nbsp;·&nbsp; <b>العربية</b>
+  <a href="README.md"><img src="assets/language/btn-english.svg" alt="English" height="36"></a>
+  &nbsp;
+  <a href="README.he.md"><img src="assets/language/btn-hebrew.svg" alt="עברית" height="36"></a>
+  &nbsp;
+  <img src="assets/language/btn-arabic-active.svg" alt="العربية" height="36">
 </p>
 
 <p align="center">
@@ -50,7 +54,15 @@
 
 ### macOS Desktop — الطريقة السهلة (موصى بها)
 
-تطبيق في شريط القوائم يُثبّت ويُحدّث RTL بنقرة. التطبيق المبني **لا يحتاج Node ولا طرفية**.
+تطبيق في شريط القوائم يُثبّت ويُحدّث ويُزيل RTL بنقرة. **لا يحتاج Node ولا طرفية**.
+
+**الخيار أ — تنزيل التطبيق** (الأسرع)
+
+1. نزّل **`Claude-RTL.dmg`** من [أحدث إصدار](https://github.com/liorshaya/claude-desktop-rtl/releases/latest).
+2. افتحه واسحب **Claude RTL** إلى **Applications**.
+3. *عند الفتح لأول مرة فقط:* انقر بزر الفأرة الأيمن على التطبيق → **Open** → **Open**. *(macOS Sequoia: System Settings → Privacy & Security → “Open Anyway”.)* هذه الخطوة لمرة واحدة لأن التطبيق مفتوح المصدر وموقّع ad-hoc وليس موثّقًا من Apple — الخيار ب يتجاوزها تمامًا.
+
+**الخيار ب — البناء من المصدر** (دون تنبيه Gatekeeper)
 
 ```bash
 git clone https://github.com/liorshaya/claude-desktop-rtl.git
@@ -63,7 +75,7 @@ open "dist/Claude RTL.app"
 2. سيطلب macOS كلمة مرور الـkeychain مرة واحدة → **Always Allow** *(جهازك، keychain خاصتك)*.
 3. اضغط **Open Claude-RTL**. هذا كل شيء — RTL سلس.
 
-فعّل **“Keep RTL after Claude updates”** ليُعيد تطبيق نفسه عند كل تحديث لـClaude.
+فعّل **“Keep RTL after Claude updates”** ليُعيد تطبيق نفسه عند كل تحديث لـClaude. زر **Check for updates** (ضمن *Details*) يجلب إصدارات أحدث من التطبيق نفسه.
 
 > نسخة Claude الأصلية في `/Applications` لا تُمسّ. زر “Open Claude-RTL” يُغلق الأصلية أولًا (لا يمكنهما العمل معًا). نافذة أولى فارغة؟ أغلق (⌘Q) وأعد الفتح.
 

@@ -3,7 +3,11 @@
 </p>
 
 <p align="center">
-  <b>English</b> &nbsp;·&nbsp; <a href="README.he.md">עברית</a> &nbsp;·&nbsp; <a href="README.ar.md">العربية</a>
+  <img src="assets/language/btn-english-active.svg" alt="English" height="36">
+  &nbsp;
+  <a href="README.he.md"><img src="assets/language/btn-hebrew.svg" alt="עברית" height="36"></a>
+  &nbsp;
+  <a href="README.ar.md"><img src="assets/language/btn-arabic.svg" alt="العربية" height="36"></a>
 </p>
 
 <p align="center">
@@ -48,7 +52,15 @@ Claude writes beautiful Hebrew and Arabic — then renders it **left-to-right**:
 
 ### macOS Desktop — the easy way (recommended)
 
-A menu-bar app installs and updates RTL with one click. The built app needs **no Node and no terminal**.
+A menu-bar app installs, updates, and removes RTL with one click. It needs **no Node and no terminal**.
+
+**Option A — download the app** (fastest)
+
+1. Download **`Claude-RTL.dmg`** from the [latest release](https://github.com/liorshaya/claude-desktop-rtl/releases/latest).
+2. Open it and drag **Claude RTL** onto **Applications**.
+3. *First launch only:* right-click the app → **Open** → **Open**. *(macOS Sequoia: System Settings → Privacy & Security → “Open Anyway”.)* This one-time step exists because the app is open-source and ad-hoc signed, not Apple-notarized — Option B skips it entirely.
+
+**Option B — build from source** (no Gatekeeper prompt)
 
 ```bash
 git clone https://github.com/liorshaya/claude-desktop-rtl.git
@@ -61,7 +73,7 @@ Then, from the menu-bar app:
 2. macOS asks for your keychain password once → click **Always Allow** *(it's your machine, your keychain)*.
 3. Click **Open Claude-RTL**. That's it — smooth RTL.
 
-Toggle **“Keep RTL after Claude updates”** and it re-applies itself whenever Claude updates.
+Toggle **“Keep RTL after Claude updates”** and it re-applies itself whenever Claude updates. **Check for updates** (under *Details*) fetches newer builds of the app itself.
 
 > The original Claude in `/Applications` is never touched. “Open Claude-RTL” quits the original first (they can't run together). A blank first window? Quit (⌘Q) and reopen.
 
@@ -102,9 +114,9 @@ Full design: **[ARCHITECTURE.md](ARCHITECTURE.md)**.
 
 ## 🗺️ Roadmap
 
-- ✅ Engine · browser · macOS desktop · auto-update watcher · trust/signing · self-contained GUI
+- ✅ Engine · browser · macOS desktop · auto-update watcher · trust/signing · self-contained GUI · app icon · `.dmg` · in-app update check
 - ⏳ **Windows** (same engine; a Windows patch pipeline + GUI) — see [CONTRIBUTING.md](CONTRIBUTING.md)
-- ⏳ Custom app icon · `.dmg` installer · onboarding window
+- ⏳ Onboarding window · styled `.dmg` · screenshot gallery
 
 ## 🤝 Contributing
 

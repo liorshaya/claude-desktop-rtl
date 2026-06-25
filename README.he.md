@@ -3,7 +3,11 @@
 </p>
 
 <p align="center">
-  <a href="README.md">English</a> &nbsp;·&nbsp; <b>עברית</b> &nbsp;·&nbsp; <a href="README.ar.md">العربية</a>
+  <a href="README.md"><img src="assets/language/btn-english.svg" alt="English" height="36"></a>
+  &nbsp;
+  <img src="assets/language/btn-hebrew-active.svg" alt="עברית" height="36">
+  &nbsp;
+  <a href="README.ar.md"><img src="assets/language/btn-arabic.svg" alt="العربية" height="36"></a>
 </p>
 
 <p align="center">
@@ -50,7 +54,15 @@ Claude כותב עברית וערבית יפות — אבל מרנדר אותן 
 
 ### macOS Desktop — הדרך הקלה (מומלץ)
 
-אפליקציית menu-bar מתקינה ומעדכנת RTL בקליק. האפליקציה הבנויה **לא צריכה Node ולא טרמינל**.
+אפליקציית menu-bar מתקינה, מעדכנת ומסירה RTL בקליק. **לא צריכה Node ולא טרמינל**.
+
+**אפשרות א׳ — הורדת האפליקציה** (הכי מהיר)
+
+1. הורד את **`Claude-RTL.dmg`** מ‑[הגרסה האחרונה](https://github.com/liorshaya/claude-desktop-rtl/releases/latest).
+2. פתח וגרור את **Claude RTL** לתוך **Applications**.
+3. *בפתיחה הראשונה בלבד:* קליק‑ימני על האפליקציה → **Open** → **Open**. *(macOS Sequoia: System Settings → Privacy & Security → “Open Anyway”.)* הצעד החד‑פעמי הזה קיים כי האפליקציה open-source וחתומה ad-hoc, לא notarized של Apple — אפשרות ב׳ עוקפת אותו לגמרי.
+
+**אפשרות ב׳ — בנייה מהמקור** (בלי אזהרת Gatekeeper)
 
 ```bash
 git clone https://github.com/liorshaya/claude-desktop-rtl.git
@@ -63,7 +75,7 @@ open "dist/Claude RTL.app"
 2. macOS יבקש סיסמת keychain פעם אחת → **Always Allow** *(המחשב שלך, ה‑keychain שלך)*.
 3. לחץ **Open Claude-RTL**. זהו — RTL חלק.
 
-הפעל את **“Keep RTL after Claude updates”** והוא יחיל את עצמו מחדש בכל עדכון של Claude.
+הפעל את **“Keep RTL after Claude updates”** והוא יחיל את עצמו מחדש בכל עדכון של Claude. **Check for updates** (תחת *Details*) מושך גרסאות חדשות של האפליקציה עצמה.
 
 > ה‑Claude המקורי ב‑`/Applications` לעולם לא נגע. “Open Claude-RTL” סוגר קודם את המקורי (הם לא יכולים לרוץ יחד). חלון ראשון לבן? צא (⌘Q) ופתח שוב.
 
