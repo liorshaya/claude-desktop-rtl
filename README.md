@@ -1,3 +1,115 @@
 <p align="center">
   <img src="assets/claude-desktop-rtl-banner.svg" alt="Claude Desktop RTL" width="100%">
 </p>
+
+<p align="center">
+  <b>English</b> &nbsp;·&nbsp; <a href="README.he.md">עברית</a> &nbsp;·&nbsp; <a href="README.ar.md">العربية</a>
+</p>
+
+<p align="center">
+  <i>Smooth right-to-left (Hebrew · Arabic · Persian) for <b>Claude Desktop</b> &amp; <b>claude.ai</b> — from one pure engine.</i>
+</p>
+
+<p align="center">
+  <img alt="Platform" src="https://img.shields.io/badge/desktop-macOS%2013%2B-000000?logo=apple&logoColor=white">
+  <img alt="Browser" src="https://img.shields.io/badge/browser-any%20OS%20(userscript)-4c9a2a">
+  <img alt="License" src="https://img.shields.io/badge/license-MIT-3b82f6">
+  <img alt="Network" src="https://img.shields.io/badge/network-zero-16a34a">
+  <img alt="PRs" src="https://img.shields.io/badge/PRs-welcome-d4572a">
+</p>
+
+---
+
+Claude writes beautiful Hebrew and Arabic — then renders it **left-to-right**: bullets on the wrong side, sentence-final punctuation jumping across the line, tables flowing backwards. **Claude RTL** fixes that everywhere Claude runs, and it does it **without ever touching your text or your network**.
+
+## Why it's different
+
+- 🎯 **Per-block direction, done right.** Each paragraph, list, table and quote decides its *own* direction from its *own* content. English blocks stay LTR and Hebrew blocks flip RTL — **in the same document**, with no global flip (the bug every other tool has).
+- 🔒 **Zero network. Zero telemetry. Zero stored data.** Your conversations never leave your machine. Copy and Ctrl-F stay **byte-for-byte** — we never inject invisible Unicode marks.
+- 🛡️ **Safe by construction.** Your original Claude is **never modified**. We patch a separate copy, and it **survives Claude updates automatically**.
+- 🖥️ **Desktop *and* browser, one engine.** A one-click macOS menu-bar app for Claude Desktop, and a userscript for claude.ai in any browser — sharing the exact same bidi engine.
+- 🧪 **A pure, unit-tested core.** The bidi intelligence (`engine/`) is DOM-free and covered by a torture-test corpus, decoupled from how it's delivered.
+
+## What it handles
+
+| Surface | Behaviour |
+|---|---|
+| Prose (paragraphs, headings) | Per-block base direction via the browser's own first-strong |
+| Lists (incl. nested) | Markers + indent hang on the content side; smart per-item direction |
+| Tables | Column order follows the header; every cell aligns to the table |
+| Block quotes | The bar/indent move to the content side |
+| Numbers, currency, %, dates | Ordered correctly; never force a Hebrew line LTR |
+| Arrows (`→`) in RTL | Mirrored visually — the character itself is untouched |
+| Code blocks | Stay **LTR** by design (RTL would scramble syntax) |
+| Input / edit boxes | `dir="auto"`, instantly, with no flicker |
+| Mixed English/Hebrew doc | Each block self-determines — no global flip |
+
+## 🚀 Install
+
+### macOS Desktop — the easy way (recommended)
+
+A menu-bar app installs and updates RTL with one click. The built app needs **no Node and no terminal**.
+
+```bash
+git clone https://github.com/liorshaya/claude-desktop-rtl.git
+cd claude-desktop-rtl/gui && ./build.sh          # one-time build (needs Node + Xcode CLT)
+open "dist/Claude RTL.app"
+```
+
+Then, from the menu-bar app:
+1. Click **Install RTL** — it patches a copy at `~/Applications/Claude-RTL.app`.
+2. macOS asks for your keychain password once → click **Always Allow** *(it's your machine, your keychain)*.
+3. Click **Open Claude-RTL**. That's it — smooth RTL.
+
+Toggle **“Keep RTL after Claude updates”** and it re-applies itself whenever Claude updates.
+
+> The original Claude in `/Applications` is never touched. “Open Claude-RTL” quits the original first (they can't run together). A blank first window? Quit (⌘Q) and reopen.
+
+### Browser — claude.ai (any OS)
+
+Works in Chrome, Edge, Firefox, Safari — anywhere with a userscript manager.
+
+```bash
+npm run build            # builds dist/claude-rtl.user.js
+```
+
+1. Install **Tampermonkey** (or Violentmonkey).
+2. Open `dist/claude-rtl.user.js` and install it (or paste its contents into a new script).
+3. In the extension, enable **“Allow User Scripts”** (a Chrome/Edge requirement).
+4. Reload `claude.ai`.
+
+### CLI — advanced (macOS)
+
+```bash
+desktop/patch.sh --install      # patch (build a copy + inject RTL)
+desktop/patch.sh --watch        # auto-re-apply on Claude updates
+desktop/patch.sh --status       # original / patched / watcher state
+desktop/patch.sh --uninstall    # remove the copy (original untouched)
+```
+
+## 🧠 How it works
+
+The browser already runs a complete Unicode Bidi Algorithm. We don't reimplement it — we make the **direction & isolation decisions** and let the renderer reorder. CSS `unicode-bidi: plaintext` per leaf block is the sole base-direction mechanism for prose, so every block self-determines and the container is never force-flipped. The desktop app injects the same engine into Claude's renderer bundles and flips only the window-chrome direction in the main process.
+
+Full design: **[ARCHITECTURE.md](ARCHITECTURE.md)**.
+
+## ⚠️ Limitations (v1)
+
+- **Real code blocks stay LTR** (deliberate — RTL scrambles braces, indentation, operators).
+- **Desktop Artifacts** render in a cross-origin iframe the desktop payload can't enter yet (the browser userscript does cover them).
+- **No bundled Hebrew font yet** — macOS already renders Hebrew via system fonts.
+- See **[ARCHITECTURE.md §15](ARCHITECTURE.md)** for the full list.
+
+## 🗺️ Roadmap
+
+- ✅ Engine · browser · macOS desktop · auto-update watcher · trust/signing · self-contained GUI
+- ⏳ **Windows** (same engine; a Windows patch pipeline + GUI) — see [CONTRIBUTING.md](CONTRIBUTING.md)
+- ⏳ Custom app icon · `.dmg` installer · onboarding window
+
+## 🤝 Contributing
+
+PRs are very welcome — this is open source. The engine is pure and unit-tested; the bar is a green `node --test` and a small, single-purpose change. Start with **[CONTRIBUTING.md](CONTRIBUTING.md)**, and if Claude changes its DOM, the **[adopt-a-new-Claude-version runbook](docs/RUNBOOK-adopt-new-claude-version.md)** shows exactly how to update the selectors.
+
+## 📄 License
+
+[MIT](LICENSE) © Lior Shaya
