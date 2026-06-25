@@ -12,7 +12,7 @@
 #>
 
 $ErrorActionPreference = 'Continue'
-function Hr($t){ Write-Host ""; Write-Host ("== {0} " -f $t).PadRight(78,'=') -ForegroundColor Cyan }
+function Hr($t){ Write-Host ""; Write-Host (("== {0} " -f $t).PadRight(78,[char]'=')) -ForegroundColor Cyan }
 function KV($k,$v){ Write-Host ("  {0,-24}: {1}" -f $k,$v) }
 $report = [ordered]@{}
 
