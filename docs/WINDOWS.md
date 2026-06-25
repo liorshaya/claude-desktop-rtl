@@ -264,12 +264,15 @@ Claude `1.15200.0`:
 
 ## 11. Phased plan (proposed P7+)
 
-1. **P7.0 — Spike on real Windows.** Answer §10 on an actual machine. Read the shraga100 PoC.
-   Decide the §3.1 "touch the original" policy. *No shipping code until this is done.*
+1. **P7.0 — Spike on real Windows. [DONE 2026-06-25]** §10 answered in §10.1 (Squirrel install);
+   §3.1 policy decided (patch in place + `.crtl-bak`). *No shipping code shipped until this was done.*
 2. **Immediate coverage — the browser userscript** already gives Windows users RTL on `claude.ai`
    today, zero risk. Make sure it's documented for Windows.
-3. **P7.1 — Windows patch pipeline.** Port `patch.sh` → `patch.ps1` (or the helper): asar
-   extract/inject/pack (keep), hash byte-replace (new), MSIX in-place handling (new), no re-sign.
+3. **P7.1 — Windows patch pipeline. [DONE 2026-06-25]** `desktop/windows/`: `inject.mjs` (byte-exact
+   payload + `force-ui-direction` switch, pure Node), `patch.ps1` (locate Squirrel install → stop
+   Claude → back up → asar extract/inject/pack → fuse-off; `-Restore`/`-Status`), `preflight.ps1`.
+   asar extract/inject/pack kept; integrity via **fuse-off** (not byte-replace); in-place Squirrel
+   (MSIX deferred); no re-sign. Verified on `app-1.15200.0`: Hebrew renders RTL.
 4. **P7.2 — Helper.** `claude-rtl-helper.exe` via Node SEA + `hashreplace`.
 5. **P7.3 — Watcher.** `FileSystemWatcher` + logon persistence.
 6. **P7.4 — GUI.** WPF + H.NotifyIcon tray app wrapping the helper, mirroring `gui/`.

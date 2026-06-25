@@ -24,10 +24,28 @@ ACL-locked). Then copy the whole console output (the `Q1`–`Q7` sections **and*
 
 That output answers [docs/WINDOWS.md §10](../../docs/WINDOWS.md) and unblocks the rest.
 
-## Step 2+ (after the report)
+## Step 2 (now): apply the patch
 
-`patch.ps1` (pipeline), the Node-SEA `claude-rtl-helper.exe` + `hashreplace`, the
-`FileSystemWatcher` watcher, the WPF tray GUI (`gui/windows`), and the Inno Setup installer —
-all built from the diagnostic's findings, per the phased plan in docs/WINDOWS.md §11.
+The pipeline is built and verified on a real Squirrel install. From the repo root, in **PowerShell**:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\desktop\windows\preflight.ps1   # readiness (read-only)
+powershell -ExecutionPolicy Bypass -File .\desktop\windows\patch.ps1        # apply RTL in place
+```
+
+`patch.ps1` stops Claude, backs up `claude.exe` + `app.asar` to `*.crtl-bak`, injects the RTL
+payload into the renderer bundles + the `force-ui-direction=ltr` switch into the main entry, repacks
+the asar, and flips the `EnableEmbeddedAsarIntegrityValidation` fuse off (the §3.1 in-place decision).
+It needs **Node** (for the byte-exact `inject.mjs` and `npx @electron/asar` / `@electron/fuses`).
+Undo anytime with `patch.ps1 -Restore`; inspect state with `patch.ps1 -Status`. Then open Claude —
+Hebrew/Arabic/Persian render RTL.
+
+> Only the legacy **Squirrel** install is supported today (the common case for existing users).
+> **MSIX** (new installs since 2026-02-10) is not yet handled — see [../../docs/WINDOWS.md](../../docs/WINDOWS.md) §3.
+
+## Later (per docs/WINDOWS.md §11)
+
+The Node-SEA `claude-rtl-helper.exe` (P7.2), the `FileSystemWatcher` auto-reapply watcher (P7.3), the
+WPF tray GUI `gui/windows` (P7.4), and the Inno Setup per-user installer (P7.5).
 
 Prior art to mine: [shraga100/claude-desktop-rtl-patch](https://github.com/shraga100/claude-desktop-rtl-patch).
