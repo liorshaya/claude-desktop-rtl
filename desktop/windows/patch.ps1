@@ -18,7 +18,9 @@
 param(
   [switch]$Restore,
   [switch]$Status,
-  [switch]$Force    # stop a running Claude without an extra notice
+  [switch]$Watch,    # install the per-user logon watcher (auto-reapply after a Claude update)
+  [switch]$Unwatch,  # remove the logon watcher
+  [switch]$Force     # stop a running Claude without an extra notice
 )
 $ErrorActionPreference = 'Stop'
 
@@ -30,6 +32,9 @@ $Inject     = Join-Path $ScriptDir 'inject.mjs'
 $Preflight  = Join-Path $ScriptDir 'preflight.ps1'
 $Marker     = 'claude-rtl-payload-v1'
 $UnpackGlob = '{**/*.node,**/*.dll}'
+$WatchPs1   = Join-Path $ScriptDir 'watch.ps1'
+$RunKey     = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+$RunName    = 'ClaudeRtlWatcher'
 
 function Log($m){ Write-Host "patch: $m" }
 function Die($m){ throw $m }
@@ -66,7 +71,32 @@ function Stop-Claude {
   }
 }
 
+# --- logon watcher (auto-reapply after Claude updates): the launchd cmd_watch analogue ---
+function Install-Watcher {
+  if (-not (Test-Path $WatchPs1)) { Die "watch.ps1 not found at $WatchPs1." }
+  $cmd = 'powershell -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "{0}"' -f $WatchPs1
+  New-Item -Path $RunKey -Force | Out-Null
+  Set-ItemProperty -Path $RunKey -Name $RunName -Value $cmd
+  Start-Process -FilePath 'powershell' -WindowStyle Hidden -ArgumentList @('-NoProfile','-WindowStyle','Hidden','-ExecutionPolicy','Bypass','-File',$WatchPs1) | Out-Null
+  Log "watcher installed (logon) and started - re-applies RTL after a Claude update."
+  Log "log: $env:LOCALAPPDATA\claude-rtl\watch.log   (remove with: patch.ps1 -Unwatch)"
+}
+
+function Remove-Watcher {
+  Remove-ItemProperty -Path $RunKey -Name $RunName -ErrorAction SilentlyContinue
+  $stopped = 0
+  # Match ONLY the resident watcher: a powershell whose command line carries watch.ps1's full
+  # path. Exclude our own PID. (A broad '*watch.ps1*' match could hit unrelated shells that merely
+  # mention the path - including the one running this script.)
+  Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -and $_.CommandLine.Contains($WatchPs1) } |
+    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue; $stopped++ }
+  Log "watcher removed (logon entry deleted, $stopped running watcher(s) stopped)."
+}
+
 try {
+  if ($Watch)   { Install-Watcher; exit 0 }
+  if ($Unwatch) { Remove-Watcher;  exit 0 }
   $ins = Get-Install
 
   # --- STATUS ---
@@ -79,6 +109,8 @@ try {
     Log "fuse    : $($line.Trim())"
     $running = Get-Process -Name 'claude' -ErrorAction SilentlyContinue
     Log "running : $([bool]$running)"
+    $runVal = (Get-ItemProperty -Path $RunKey -Name $RunName -ErrorAction SilentlyContinue).$RunName
+    Log "watcher : $([bool]$runVal)  (logon auto-reapply)"
     exit 0
   }
 
