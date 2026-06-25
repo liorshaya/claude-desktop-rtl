@@ -126,13 +126,21 @@ struct ContentView: View {
     }
 
     private var warning: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-            Text("Claude is open — “Open” will quit it first").font(.caption)
-            Spacer()
-            Button("Quit") { Task { await runner.quitOriginal() } }.controlSize(.small).buttonStyle(.bordered)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .top, spacing: 6) {
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                Text("Claude is open — it'll be quit first before opening Claude-RTL.")
+                    .font(.caption)
+                    .fixedSize(horizontal: false, vertical: true)   // wrap, never truncate
+            }
+            HStack {
+                Spacer()
+                Button("Quit Claude now") { Task { await runner.quitOriginal() } }
+                    .controlSize(.small).buttonStyle(.bordered)
+            }
         }
         .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(.orange.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
