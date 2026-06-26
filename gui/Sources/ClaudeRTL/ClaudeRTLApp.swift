@@ -59,18 +59,32 @@ private struct BrandButton: ButtonStyle {
     }
 }
 
+// Carries the SwiftUI-measured content height out of the view tree (see WindowResizer for why
+// we measure it ourselves instead of asking AppKit).
+private struct HeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+}
+
 // Forces the MenuBarExtra panel to track the SwiftUI content's exact height (grow AND shrink).
 // MenuBarExtra(.window) only ever grows the panel, so without this the window keeps its largest
 // size and the content ends up un-anchored with a transparent gap. We resize the panel to the
-// content's fitting height, keeping the top edge fixed (it drops down from the menu bar).
+// content height, keeping the top edge fixed (it drops down from the menu bar).
+//
+// `height` is the SwiftUI-measured height of the .fixedSize content — NOT win.contentView.fittingSize.
+// On some setups (e.g. a built-in Retina display) MenuBarExtra pins its hosting view to the panel's
+// high-water-mark size, so fittingSize keeps reporting the stale large height when Details collapses;
+// the shrink guard then sees no change and the gap stays. The SwiftUI geometry is the true intrinsic
+// height on every machine, so driving the resize from it grows AND shrinks reliably everywhere.
 private struct WindowResizer: NSViewRepresentable {
-    var trigger: String
+    var height: CGFloat
     func makeNSView(context: Context) -> NSView { NSView(frame: .zero) }
     func updateNSView(_ nsView: NSView, context: Context) {
+        let target = height
+        guard target > 1 else { return }
         DispatchQueue.main.async {
-            guard let win = nsView.window, let content = win.contentView else { return }
-            let target = content.fittingSize.height
-            guard target > 1, abs(win.frame.height - target) > 0.5 else { return }
+            guard let win = nsView.window else { return }
+            guard abs(win.frame.height - target) > 0.5 else { return }
             var f = win.frame
             let top = f.maxY                 // keep the top edge anchored to the menu bar
             f.size.height = target
@@ -83,6 +97,7 @@ private struct WindowResizer: NSViewRepresentable {
 struct ContentView: View {
     @ObservedObject var runner: PatchRunner
     @State private var showDetails = false
+    @State private var contentHeight: CGFloat = 0
 
     private var s: AppStatus { runner.status }
     private var needsUpdate: Bool {
@@ -108,9 +123,14 @@ struct ContentView: View {
         .fixedSize(horizontal: false, vertical: true)
         // MenuBarExtra(.window) grows its panel to fit content but never shrinks it back (the
         // "high-water-mark" bug) - leaving a transparent gap above the content when Details closes.
-        // WindowResizer grabs the hosting panel and forces its height to the content's exact fitting
-        // size on every layout, anchored at the top edge, so it grows AND shrinks cleanly.
-        .background(WindowResizer(trigger: "\(showDetails)|\(runner.busy)|\(s.originalRunning)|\(s.patchedInstalled)|\(needsUpdate)"))
+        // Measure the content's intrinsic height in SwiftUI and feed it to WindowResizer, which
+        // forces the hosting panel to that exact height (top-anchored) so it grows AND shrinks
+        // cleanly on every machine — see WindowResizer for why fittingSize can't be trusted.
+        .background(GeometryReader { g in
+            Color.clear.preference(key: HeightKey.self, value: g.size.height)
+        })
+        .onPreferenceChange(HeightKey.self) { contentHeight = $0 }
+        .background(WindowResizer(height: contentHeight))
     }
 
     // MARK: - Header
