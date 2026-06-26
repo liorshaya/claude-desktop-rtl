@@ -15,11 +15,19 @@ public partial class DashboardWindow : Window
     private UpdateInfo? _upd;
     private bool _busy;
 
+    private DateTime _lastRefresh;
+
     public DashboardWindow(PatchService svc)
     {
         InitializeComponent();
         _svc = svc;
         VersionLine.Text = $"App version {_svc.AppVersion}";
+        // Re-check status whenever the user returns to the window (debounced), so it's never stale.
+        Activated += async (_, _) =>
+        {
+            if (_busy || (DateTime.UtcNow - _lastRefresh).TotalSeconds < 1.5) return;
+            await RefreshAsync();
+        };
     }
 
     public static void ShowSingleton(PatchService svc)
@@ -40,22 +48,35 @@ public partial class DashboardWindow : Window
         _st = await _svc.RefreshAsync();
         ApplyStatus();
         RefreshLog();
+        _lastRefresh = DateTime.UtcNow;
     }
 
     private void ApplyStatus()
     {
         bool none = _st.Kind == InstallKind.None;
-        StatusLine.Text  = none ? "No Claude install found" : _st.FullyPatched ? "RTL is active" : "RTL not applied";
-        InstallLine.Text = none ? "Install Claude Desktop first"
-                         : $"{(_st.Kind == InstallKind.Msix ? "MSIX" : "Squirrel")} · v{_st.Version}";
+        bool active = _st.FullyPatched;
+
+        // Hero: one reassuring glance (green = set, amber = action needed, gray = no install).
+        (string badge, string icon, string title, string sub) =
+            none   ? ("GrayDot", "–", "No Claude install found", "Install Claude Desktop first, then reopen this.") :
+            active ? ("OkGreen", "✓", "You're all set", "RTL is active on Claude.") :
+                     ("Amber",   "!",      "RTL not applied", "Click “Install RTL” below to enable it.");
+        HeroBadge.Background = (Brush)FindResource(badge);
+        HeroIcon.Text  = icon;
+        HeroTitle.Text = title;
+        HeroSub.Text   = sub;
+        InstallLine.Text = none ? "" : $"{(_st.Kind == InstallKind.Msix ? "MSIX" : "Squirrel")} · v{_st.Version}";
+        InstallLine.Visibility = none ? Visibility.Collapsed : Visibility.Visible;
 
         SetDot(DotRtl, ValRtl, _st.RtlActive);
         SetDot(DotCowork, ValCowork, _st.CoworkOk, na: _st.Kind == InstallKind.Squirrel);
         SetDot(DotAuto, ValAuto, _st.AutoUpdateOn);
 
+        StartupToggle.IsChecked = _svc.IsStartupEnabled();
+        StartupToggle.IsEnabled = !_busy;
         AutoToggle.IsChecked = _st.AutoUpdateOn;
         AutoToggle.IsEnabled = !none && !_busy;
-        PrimaryBtn.Content   = none ? "No Claude install" : _st.FullyPatched ? "Re-apply RTL" : "Install RTL";
+        PrimaryBtn.Content   = none ? "No Claude install" : active ? "Re-apply RTL" : "Install RTL";
         PrimaryBtn.IsEnabled = !none && !_busy;
     }
 
@@ -73,6 +94,9 @@ public partial class DashboardWindow : Window
     private async void OnRestore(object s, RoutedEventArgs e)
         => await RunOp(() => _svc.RestoreAsync(_st.Kind), "Restoring original… (admin)");
 
+    private void OnStartupToggle(object s, RoutedEventArgs e)
+        => _svc.SetStartup(StartupToggle.IsChecked == true);   // HKCU Run key — instant, no admin
+
     private async void OnToggle(object s, RoutedEventArgs e)
     {
         bool want = AutoToggle.IsChecked == true;
@@ -87,6 +111,7 @@ public partial class DashboardWindow : Window
         BusyText.Visibility = Visibility.Visible;
         PrimaryBtn.IsEnabled = false;
         AutoToggle.IsEnabled = false;
+        DetailsExpander.IsExpanded = true;   // show the live log while the operation runs
 
         var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
         timer.Tick += (_, _) =>

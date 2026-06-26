@@ -106,6 +106,37 @@ public sealed class PatchService
     public Task<int> RestoreAsync(InstallKind k)          => RunElevatedAsync(k, "-Restore");
     public Task<int> SetAutoUpdateAsync(InstallKind k, bool on) => RunElevatedAsync(k, on ? "-Watch" : "-Unwatch");
 
+    // --- launch the tray app at login (HKCU Run key; no admin). NOTE: the RTL patch itself already
+    //     persists across reboots — it's baked into Claude's files. This only auto-starts the tray. ---
+    const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
+    const string RunValueName = "ClaudeRTL";
+
+    public bool IsStartupEnabled()
+    {
+        try
+        {
+            using var k = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(RunKeyPath);
+            return k?.GetValue(RunValueName) is string;
+        }
+        catch { return false; }
+    }
+
+    public void SetStartup(bool on)
+    {
+        try
+        {
+            using var k = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(RunKeyPath);
+            if (k == null) return;
+            if (on)
+            {
+                var exe = Environment.ProcessPath ?? Process.GetCurrentProcess().MainModule?.FileName;
+                if (exe != null) k.SetValue(RunValueName, $"\"{exe}\"");
+            }
+            else k.DeleteValue(RunValueName, false);
+        }
+        catch { /* registry unavailable — non-fatal */ }
+    }
+
     // --- update check (GitHub Releases API; user-initiated, GET-only, the one network call) ---
     const string Repo = "liorshaya/claude-desktop-rtl";
     public string AppVersion =>
