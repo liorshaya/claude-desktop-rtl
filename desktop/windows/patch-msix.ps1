@@ -220,6 +220,11 @@ function Remove-RtlCerts {
 function Invoke-CertDance($exe, $coworkSvc) {
   if (-not (Test-Path $coworkSvc)) { Log "cowork-svc.exe absent - no Cowork gate to satisfy; skipping cert-dance."; return }
   Stop-Cowork
+  # Restore cowork-svc.exe to pristine from its backup so the original Anthropic cert is present to
+  # locate (a previous run may already have swapped in ours). Then clear certs from a prior run.
+  $svcBak = "$coworkSvc.crtl-bak"
+  if (Test-Path $svcBak) { Copy-Item $svcBak $coworkSvc -Force }
+  Remove-RtlCerts
   Log "cert-dance: locating the Anthropic cert inside cowork-svc.exe..."
   $svcBytes = [System.IO.File]::ReadAllBytes($coworkSvc)
   $hole = Find-CertHole $svcBytes
@@ -229,13 +234,25 @@ function Invoke-CertDance($exe, $coworkSvc) {
   $cert = New-FittingCert $hole.Size
   try {
     Log "re-signing Claude.exe with the self-signed cert (can take a few seconds)..."
-    $r1 = Set-AuthenticodeSignature -FilePath $exe -Certificate $cert -HashAlgorithm SHA256
+    # Claude may relaunch during the (slow) cert generation and lock its own exe. Re-kill it and
+    # retry the signing a few times so a transient relaunch can't fail the whole patch.
+    $r1 = $null
+    for ($attempt = 1; $attempt -le 6; $attempt++) {
+      Stop-Claude
+      try { $r1 = Set-AuthenticodeSignature -FilePath $exe -Certificate $cert -HashAlgorithm SHA256; break }
+      catch {
+        if ($attempt -eq 6) { throw }
+        Log "  Claude.exe is locked (attempt $attempt/6) - re-killing Claude and retrying..."
+        Start-Sleep -Milliseconds 800
+      }
+    }
     if ($r1.Status -ne 'Valid') { Die "re-signing Claude.exe failed: $($r1.Status)" }
 
     Log "swapping the cert inside cowork-svc.exe (padded with 0x00 to keep size)..."
     $padded = New-Object byte[] $hole.Size
     [Array]::Copy($cert.RawData, 0, $padded, 0, $cert.RawData.Length)
     [Array]::Copy($padded, 0, $svcBytes, $hole.Start, $hole.Size)
+    Stop-Cowork   # in case the (Automatic) service restarted during cert generation
     [System.IO.File]::WriteAllBytes($coworkSvc, $svcBytes)
 
     Log "re-signing cowork-svc.exe..."
@@ -348,6 +365,12 @@ try {
   if (-not (Test-Path $exeBak))  { Copy-Item $ins.Exe  $exeBak  -Force; Log "backed up Claude.exe" } else { Log "Claude.exe backup already present." }
   if (-not (Test-Path $asarBak)) { Copy-Item $ins.Asar $asarBak -Force; Log "backed up app.asar" } else { Log "app.asar backup already present." }
   if ((Test-Path $ins.CoworkSvc) -and -not (Test-Path $svcBak)) { Copy-Item $ins.CoworkSvc $svcBak -Force; Log "backed up cowork-svc.exe" } elseif (Test-Path $svcBak) { Log "cowork-svc.exe backup already present." }
+
+  # Always patch from a pristine baseline so re-apply is idempotent and the cert-dance can find the
+  # original Anthropic cert again. Claude is stopped, so Claude.exe + app.asar are free to overwrite.
+  if (Test-Path $exeBak)  { Copy-Item $exeBak  $ins.Exe  -Force }
+  if (Test-Path $asarBak) { Copy-Item $asarBak $ins.Asar -Force }
+  Log "reset Claude.exe + app.asar to pristine; patching fresh."
 
   $origUnpacked = @()
   if (Test-Path $ins.Unpacked) {
