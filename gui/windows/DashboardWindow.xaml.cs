@@ -151,6 +151,17 @@ public partial class DashboardWindow : Window
     }
 
     private void OnRefreshLog(object s, RoutedEventArgs e) { RefreshLog(); LogScroll.ScrollToEnd(); }
+
+    private void OnCopyLog(object s, RoutedEventArgs e)
+    {
+        var log = LogText.Text;
+        if (string.IsNullOrWhiteSpace(log)) return;
+        try { Clipboard.SetText(log); } catch { return; }
+        CopyLogBtn.Content = "Copied";
+        var t = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1200) };
+        t.Tick += (_, _) => { CopyLogBtn.Content = "Copy"; t.Stop(); };
+        t.Start();
+    }
     private void OnGitHub(object s, RoutedEventArgs e) => Open("https://github.com/liorshaya/claude-desktop-rtl");
     private void OnQuit(object s, RoutedEventArgs e) => Application.Current.Shutdown();
 

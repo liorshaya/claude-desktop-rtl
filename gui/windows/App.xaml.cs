@@ -57,15 +57,16 @@ public partial class App : Application
     private async Task RefreshIconAsync()
     {
         var st = await _svc.RefreshAsync();
-        var color = st.Kind == InstallKind.None ? Color.Gray
-                  : st.FullyPatched              ? Color.FromArgb(0x2F, 0xA8, 0x4F)
-                                                 : Color.FromArgb(0xE1, 0x92, 0x0E);
+        bool active = st.FullyPatched;
+        var color = active ? Color.FromArgb(0xD6, 0x66, 0x4A)    // brand orange = active
+                           : Color.FromArgb(0x9A, 0xA0, 0xA6);   // gray = not active
+        var tip = active ? "Claude RTL - active"
+                : st.Kind == InstallKind.None ? "Claude RTL - no Claude found"
+                : "Claude RTL - not active";
         Dispatcher.Invoke(() =>
         {
             SetIcon(color);
-            _tray.ToolTipText = "Claude RTL — " +
-                (st.Kind == InstallKind.None ? "no Claude install"
-                 : st.FullyPatched ? "active" : "needs apply");
+            _tray.ToolTipText = tip;
         });
     }
 
@@ -88,7 +89,7 @@ public partial class App : Application
         return _glyph;
     }
 
-    // The brand glyph (starburst + arrow) tinted to the state colour, rendered to a 32x32 tray icon.
+    // The brand glyph alone, tinted to the state colour (orange = active, gray = not), 32x32 tray icon.
     private static Icon MakeIcon(Color c)
     {
         using var bmp = new Bitmap(32, 32);
@@ -97,7 +98,6 @@ public partial class App : Application
             g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
             g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
             g.Clear(Color.Transparent);
-            // Recolour: map every pixel's RGB to c, keep its alpha (the glyph shape).
             var m = new ColorMatrix(new[]
             {
                 new float[] { 0, 0, 0, 0, 0 },
@@ -109,7 +109,10 @@ public partial class App : Application
             using var ia = new ImageAttributes();
             ia.SetColorMatrix(m);
             var src = Glyph();
-            g.DrawImage(src, new Rectangle(0, 0, 32, 32), 0, 0, src.Width, src.Height, GraphicsUnit.Pixel, ia);
+            int sx = 3, sy = 8, sw = 39, sh = 28;   // crop to the glyph's content bounds, fill the width
+            int dw = 30, dh = dw * sh / sw;
+            int dx = (32 - dw) / 2, dy = (32 - dh) / 2;
+            g.DrawImage(src, new Rectangle(dx, dy, dw, dh), sx, sy, sw, sh, GraphicsUnit.Pixel, ia);
         }
         IntPtr h = bmp.GetHicon();
         var icon = (Icon)Icon.FromHandle(h).Clone();

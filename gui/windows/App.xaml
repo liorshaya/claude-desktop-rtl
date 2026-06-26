@@ -68,6 +68,13 @@
       </Setter>
     </Style>
 
+    <!-- Small tooltips (the default tray tooltip rendered too large) -->
+    <Style TargetType="ToolTip">
+      <Setter Property="FontFamily" Value="{StaticResource UiFont}" />
+      <Setter Property="FontSize" Value="11.5" />
+      <Setter Property="Padding" Value="8,4" />
+    </Style>
+
     <!-- Dashboard section card -->
     <Style x:Key="Card" TargetType="Border">
       <Setter Property="Background" Value="{StaticResource CardBg}" />

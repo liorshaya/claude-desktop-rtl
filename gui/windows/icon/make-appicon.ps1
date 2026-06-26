@@ -41,10 +41,12 @@ foreach ($s in $sizes) {
     $cm = New-Object System.Drawing.Imaging.ColorMatrix (, $rows)
     $ia = New-Object System.Drawing.Imaging.ImageAttributes
     $ia.SetColorMatrix($cm)
-    $gs = [int]([double]$s * 0.60)
-    $off = [int](($s - $gs) / 2)
-    $rect = New-Object System.Drawing.Rectangle $off, $off, $gs, $gs
-    $g.DrawImage($src, $rect, 0, 0, $src.Width, $src.Height, [System.Drawing.GraphicsUnit]::Pixel, $ia)
+    # Crop the glyph to its content bounds (the PNG pads heavily, esp. vertically) and scale large.
+    $srcX = 3; $srcY = 8; $srcW = 39; $srcH = 28
+    $destW = [int]([double]$s * 0.88); $destH = [int]($destW * $srcH / $srcW)
+    $destX = [int](($s - $destW) / 2); $destY = [int](($s - $destH) / 2)
+    $rect = New-Object System.Drawing.Rectangle $destX, $destY, $destW, $destH
+    $g.DrawImage($src, $rect, $srcX, $srcY, $srcW, $srcH, [System.Drawing.GraphicsUnit]::Pixel, $ia)
 
     $g.Dispose()
     $ms = New-Object System.IO.MemoryStream

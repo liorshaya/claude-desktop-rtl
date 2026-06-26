@@ -76,7 +76,7 @@
         <StackPanel>
           <TextBlock Text="WHAT THIS DOES" FontSize="10.5" FontWeight="SemiBold" Foreground="{StaticResource Muted}" Margin="0,0,0,9" />
           <TextBlock FontSize="12.5" TextWrapping="Wrap" Foreground="{StaticResource Ink}" LineHeight="19">
-            Claude RTL injects right-to-left support into Claude's interface — the same engine used on macOS and claude.ai. Nothing is sent anywhere; <Run FontWeight="SemiBold">zero telemetry.</Run><LineBreak /><LineBreak />
+            Claude RTL adds right-to-left support to Claude's interface — auto-detecting Hebrew &amp; Arabic and aligning the text direction, without breaking English or code. Nothing is sent anywhere; <Run FontWeight="SemiBold">zero telemetry.</Run><LineBreak /><LineBreak />
             On the new <Run FontWeight="SemiBold">MSIX</Run> install, Cowork's service pins Anthropic's certificate on Claude.exe. To keep Cowork working, with your admin approval the patch re-signs Claude.exe with a self-signed certificate, swaps the matching certificate inside cowork-svc.exe, and adds that certificate to your Windows <Run FontWeight="SemiBold">Trusted Root</Run> store (its private key is wiped after signing).<LineBreak /><LineBreak />
             Every original file is backed up first. <Run FontWeight="SemiBold">Restore original</Run> reverts all of it and removes the certificate.
           </TextBlock>
@@ -88,7 +88,10 @@
         <StackPanel>
           <Grid Margin="0,0,0,9">
             <TextBlock Text="LAST OPERATION LOG" FontSize="10.5" FontWeight="SemiBold" Foreground="{StaticResource Muted}" VerticalAlignment="Center" />
-            <Button HorizontalAlignment="Right" Style="{StaticResource GhostButton}" Content="Refresh" Click="OnRefreshLog" />
+            <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
+              <Button x:Name="CopyLogBtn" Style="{StaticResource GhostButton}" Content="Copy" Click="OnCopyLog" />
+              <Button Style="{StaticResource GhostButton}" Content="Refresh" Click="OnRefreshLog" Margin="12,0,0,0" />
+            </StackPanel>
           </Grid>
           <Border Background="#1E1E22" CornerRadius="8" Padding="10" Height="128">
             <ScrollViewer x:Name="LogScroll" VerticalScrollBarVisibility="Auto">
@@ -103,6 +106,10 @@
         <Button HorizontalAlignment="Left"  Style="{StaticResource GhostButton}" Content="View on GitHub" Click="OnGitHub" />
         <Button HorizontalAlignment="Right" Style="{StaticResource GhostButton}" Content="Quit app" Click="OnQuit" />
       </Grid>
+
+      <TextBlock FontSize="11" Foreground="{StaticResource Muted}" HorizontalAlignment="Center" Margin="0,10,0,4">
+        Made with <Run Foreground="{StaticResource Brand}">&#x2665;</Run> by Lior Shaya
+      </TextBlock>
 
     </StackPanel>
   </ScrollViewer>
