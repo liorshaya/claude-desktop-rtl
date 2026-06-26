@@ -28,7 +28,16 @@ $ErrorActionPreference = 'Stop'
 
 $ScriptDir  = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot   = (Resolve-Path (Join-Path $ScriptDir '..\..')).Path
-$Payload    = Join-Path $RepoRoot 'dist\payload.js'
+
+# Offline bundled runtime (installer ships scripts\ + runtime\ + payload.js); dev falls back to a
+# system node/npx and the built dist\payload.js. Lets a packaged user patch with zero prerequisites.
+$RuntimeDir     = Join-Path $ScriptDir '..\runtime'
+$BundledNode    = Join-Path $RuntimeDir 'node.exe'
+$BundledModules = Join-Path $RuntimeDir 'node_modules'
+$NodeExe     = if (Test-Path $BundledNode)    { (Resolve-Path $BundledNode).Path }    else { 'node' }
+$NodeModules = if (Test-Path $BundledModules) { (Resolve-Path $BundledModules).Path } else { $null }
+$BundledPayload = Join-Path $ScriptDir 'payload.js'
+$Payload    = if (Test-Path $BundledPayload) { (Resolve-Path $BundledPayload).Path } else { Join-Path $RepoRoot 'dist\payload.js' }
 $BuildJs    = Join-Path $RepoRoot 'build\build-payload.js'
 $Inject     = Join-Path $ScriptDir 'inject.mjs'
 $Preflight  = Join-Path $ScriptDir 'preflight.ps1'
@@ -37,6 +46,16 @@ $UnpackGlob = '{**/*.node,**/*.dll}'
 $WatchPs1   = Join-Path $ScriptDir 'watch.ps1'
 $RunKey     = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
 $RunName    = 'ClaudeRtlWatcher'
+
+# Run @electron/asar / @electron/fuses via the bundled runtime when present (offline), else npx.
+function Resolve-Bin($pkgRel) {
+  $pkgDir = Join-Path $NodeModules $pkgRel
+  $bin = (Get-Content (Join-Path $pkgDir 'package.json') -Raw | ConvertFrom-Json).bin
+  $rel = if ($bin -is [string]) { $bin } else { ($bin.PSObject.Properties | Select-Object -First 1).Value }
+  return (Join-Path $pkgDir $rel)
+}
+function Invoke-Asar  { if ($NodeModules) { & $NodeExe (Resolve-Bin '@electron\asar')  @args } else { npx --yes @electron/asar  @args } }
+function Invoke-Fuses { if ($NodeModules) { & $NodeExe (Resolve-Bin '@electron\fuses') @args } else { npx --yes @electron/fuses @args } }
 
 function Log($m){ Write-Host "patch: $m" }
 function Die($m){ throw $m }
@@ -113,7 +132,7 @@ try {
     Log "install : $($ins.Dir)  (v$($ins.Ver))"
     $patched = (Test-Path "$($ins.Exe).crtl-bak") -and (Test-Path "$($ins.Asar).crtl-bak")
     Log "patched : $patched  (.crtl-bak backups present)"
-    $fuse = npx --yes @electron/fuses read --app $ins.Exe | Out-String
+    $fuse = (Invoke-Fuses read --app $ins.Exe) | Out-String
     $line = ($fuse -split "`n" | Where-Object { $_ -match 'EnableEmbeddedAsarIntegrityValidation' }) -join ''
     Log "fuse    : $($line.Trim())"
     $running = Get-DesktopClaude
@@ -142,7 +161,7 @@ try {
 
   if (-not (Test-Path $Payload)) {
     Log "building payload (dist/payload.js)..."
-    node $BuildJs | Out-Null
+    & $NodeExe $BuildJs | Out-Null
     if ($LASTEXITCODE -ne 0) { Die "build-payload.js failed (exit $LASTEXITCODE)." }
   }
   if (-not (Test-Path $Payload)) { Die "payload not found at $Payload." }
@@ -170,16 +189,16 @@ try {
     New-Item -ItemType Directory -Force -Path $work | Out-Null
 
     Log "extracting app.asar..."
-    npx --yes @electron/asar extract $ins.Asar $appExtract
+    Invoke-Asar extract $ins.Asar $appExtract
     if ($LASTEXITCODE -ne 0) { Die "asar extract failed (exit $LASTEXITCODE)." }
 
     Log "injecting payload + force-ui-direction switch (Node, byte-exact)..."
-    node $Inject $appExtract $Payload
+    & $NodeExe $Inject $appExtract $Payload
     if ($LASTEXITCODE -ne 0) { Die "inject.mjs failed (exit $LASTEXITCODE)." }
 
     Log "repacking app.asar (keeping native modules unpacked)..."
     Remove-Item $ins.Asar -Force
-    npx --yes @electron/asar pack $appExtract $ins.Asar --unpack $UnpackGlob
+    Invoke-Asar pack $appExtract $ins.Asar --unpack $UnpackGlob
     if ($LASTEXITCODE -ne 0) { Die "asar pack failed (exit $LASTEXITCODE) - restore with: patch.ps1 -Restore" }
 
     # safety net: every originally-unpacked native file must still be unpacked
@@ -189,7 +208,7 @@ try {
     }
 
     Log "writing fuses (EnableEmbeddedAsarIntegrityValidation=off)..."
-    npx --yes @electron/fuses write --app $ins.Exe EnableEmbeddedAsarIntegrityValidation=off | Out-Null
+    Invoke-Fuses write --app $ins.Exe EnableEmbeddedAsarIntegrityValidation=off | Out-Null
     if ($LASTEXITCODE -ne 0) { Die "fuses write failed (exit $LASTEXITCODE)." }
   }
   finally {
