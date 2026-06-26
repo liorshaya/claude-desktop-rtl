@@ -42,6 +42,10 @@ public partial class App : Application
 
         _ = RefreshIconAsync();
 
+        // First launch: guide the user through what the patch does + install it (transparency-first).
+        if (!_svc.HasOnboarded())
+            new WelcomeWindow(_svc).Show();
+
         var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(60) };
         timer.Tick += async (_, _) => await RefreshIconAsync();
         timer.Start();

@@ -137,6 +137,21 @@ public sealed class PatchService
         catch { /* registry unavailable — non-fatal */ }
     }
 
+    // --- first-run flag (HKCU) so the Welcome screen shows only once ---
+    const string AppKeyPath = @"Software\ClaudeRTL";
+
+    public bool HasOnboarded()
+    {
+        try { using var k = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(AppKeyPath); return k?.GetValue("Onboarded") != null; }
+        catch { return false; }
+    }
+
+    public void MarkOnboarded()
+    {
+        try { using var k = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(AppKeyPath); k?.SetValue("Onboarded", "1"); }
+        catch { }
+    }
+
     // --- update check (GitHub Releases API; user-initiated, GET-only, the one network call) ---
     const string Repo = "liorshaya/claude-desktop-rtl";
     public string AppVersion =>
