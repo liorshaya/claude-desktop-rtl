@@ -225,9 +225,25 @@ struct ContentView: View {
         .transition(.opacity)
     }
 
+    // Manual disclosure (not DisclosureGroup): adding/removing the body from the tree forces
+    // MenuBarExtra to re-measure and grow the window — DisclosureGroup didn't resize it on the
+    // first expand, so the content stayed clipped until another interaction.
     private var details: some View {
-        DisclosureGroup("Details", isExpanded: $showDetails) {
-            VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 8) {
+            Button { showDetails.toggle() } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "chevron.right")
+                        .rotationEffect(.degrees(showDetails ? 90 : 0))
+                        .font(.caption2)
+                    Text("Details")
+                    Spacer()
+                }
+                .contentShape(Rectangle())
+                .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain).font(.caption)
+
+            if showDetails {
                 Text("First install: macOS asks for your keychain password — click **Always Allow**. A blank first window? Quit (⌘Q) and reopen.")
                     .font(.caption2).foregroundStyle(.secondary)
                 if !runner.log.isEmpty {
@@ -252,9 +268,7 @@ struct ContentView: View {
                     .font(.caption2).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .center)
             }
-            .padding(.top, 6)
         }
-        .font(.caption)
     }
 
     // Manager version + the user-initiated update check (the project's only network call).
