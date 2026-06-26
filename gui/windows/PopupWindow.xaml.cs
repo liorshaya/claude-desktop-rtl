@@ -107,9 +107,8 @@ public partial class PopupWindow : Window
 
     private void OnDashboard(object sender, RoutedEventArgs e)
     {
-        // TODO: real dashboard window. For now, open the last operation log.
-        try { Process.Start(new ProcessStartInfo("notepad.exe", _svc.LogFile) { UseShellExecute = true }); }
-        catch { }
+        Hide();
+        DashboardWindow.ShowSingleton(_svc);
     }
 
     private void OnDeactivated(object? sender, EventArgs e)

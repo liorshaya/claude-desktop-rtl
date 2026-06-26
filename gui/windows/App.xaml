@@ -68,5 +68,15 @@
       </Setter>
     </Style>
 
+    <!-- Dashboard section card -->
+    <Style x:Key="Card" TargetType="Border">
+      <Setter Property="Background" Value="{StaticResource CardBg}" />
+      <Setter Property="CornerRadius" Value="12" />
+      <Setter Property="Padding" Value="16" />
+      <Setter Property="BorderBrush" Value="{StaticResource Hairline}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="SnapsToDevicePixels" Value="True" />
+    </Style>
+
   </Application.Resources>
 </Application>

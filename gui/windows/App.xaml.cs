@@ -28,9 +28,12 @@ public partial class App : Application
         var menu = new ContextMenu();
         var miOpen = new MenuItem { Header = "Open" };
         miOpen.Click += (_, _) => ShowPopup();
+        var miDash = new MenuItem { Header = "Dashboard…" };
+        miDash.Click += (_, _) => DashboardWindow.ShowSingleton(_svc);
         var miQuit = new MenuItem { Header = "Quit" };
         miQuit.Click += (_, _) => Shutdown();
         menu.Items.Add(miOpen);
+        menu.Items.Add(miDash);
         menu.Items.Add(new Separator());
         menu.Items.Add(miQuit);
         _tray.ContextMenu = menu;
