@@ -44,9 +44,10 @@ if ($node) { Pass "node $(node -v)" } else { Fail "node not found - install Node
 if ($npx)  { Pass "npx present" }      else { Fail "npx not found (it ships with Node)" }
 
 # --- Claude running? (patch.ps1 will stop it) ---
-$proc = Get-Process -Name 'claude' -ErrorAction SilentlyContinue
-if ($proc) { Warn "Claude is running ($($proc.Count) process[es]) - patch.ps1 will stop it" }
-else { Pass "Claude not running" }
+$base = Join-Path $env:LOCALAPPDATA 'AnthropicClaude'
+$proc = @(Get-CimInstance Win32_Process -Filter "Name='claude.exe'" -ErrorAction SilentlyContinue | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($base, [StringComparison]::OrdinalIgnoreCase) })
+if ($proc.Count -gt 0) { Warn "Claude Desktop is running ($($proc.Count) process[es]) - patch.ps1 will stop it (the Claude Code editor extension is NOT affected)" }
+else { Pass "Claude Desktop not running" }
 
 # --- long paths (informational; the extracted tree is shallow, ~127 chars) ---
 try {

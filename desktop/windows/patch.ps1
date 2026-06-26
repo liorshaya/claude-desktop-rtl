@@ -63,14 +63,21 @@ function Get-Install {
 }
 
 # --- stop a running Claude (cannot replace a locked exe/asar) ---
+function Get-DesktopClaude {
+  # ONLY Claude Desktop (processes whose exe lives under the install dir). NEVER the Claude Code
+  # editor extension, whose process is ALSO named claude.exe (e.g. under .cursor/.vscode
+  # extensions) - killing that would crash the user's Claude Code session.
+  $base = Join-Path $env:LOCALAPPDATA 'AnthropicClaude'
+  @(Get-CimInstance Win32_Process -Filter "Name='claude.exe'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($base, [StringComparison]::OrdinalIgnoreCase) })
+}
+
 function Stop-Claude {
-  $procs = Get-Process -Name 'claude' -ErrorAction SilentlyContinue
-  if (-not $procs) { return }
-  if (-not $Force) { Log "Claude is running; stopping it so the install can be patched (reopen it afterwards)." }
-  $procs | Stop-Process -Force -ErrorAction SilentlyContinue
-  for ($i = 0; $i -lt 20 -and (Get-Process -Name 'claude' -ErrorAction SilentlyContinue); $i++) {
-    Start-Sleep -Milliseconds 250
-  }
+  $procs = Get-DesktopClaude
+  if ($procs.Count -eq 0) { return }
+  if (-not $Force) { Log "Claude Desktop is running; stopping it so the install can be patched (reopen it afterwards)." }
+  $procs | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+  for ($i = 0; $i -lt 20 -and (Get-DesktopClaude).Count -gt 0; $i++) { Start-Sleep -Milliseconds 250 }
 }
 
 # --- logon watcher (auto-reapply after Claude updates): the launchd cmd_watch analogue ---
@@ -109,8 +116,8 @@ try {
     $fuse = npx --yes @electron/fuses read --app $ins.Exe | Out-String
     $line = ($fuse -split "`n" | Where-Object { $_ -match 'EnableEmbeddedAsarIntegrityValidation' }) -join ''
     Log "fuse    : $($line.Trim())"
-    $running = Get-Process -Name 'claude' -ErrorAction SilentlyContinue
-    Log "running : $([bool]$running)"
+    $running = Get-DesktopClaude
+    Log "running : $($running.Count -gt 0)"
     $runVal = (Get-ItemProperty -Path $RunKey -Name $RunName -ErrorAction SilentlyContinue).$RunName
     Log "watcher : $([bool]$runVal)  (logon auto-reapply)"
     exit 0
