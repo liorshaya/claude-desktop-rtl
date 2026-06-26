@@ -1,0 +1,101 @@
+<Window x:Class="ClaudeRtl.WelcomeWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Welcome to Claude RTL" Width="468" Height="640"
+        Icon="pack://application:,,,/Assets/app.ico"
+        WindowStartupLocation="CenterScreen" ResizeMode="CanMinimize"
+        Background="#F6F3F0" FontFamily="{StaticResource UiFont}" Foreground="{StaticResource Ink}"
+        TextOptions.TextFormattingMode="Ideal" UseLayoutRounding="True">
+
+  <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="26,24,26,22">
+    <StackPanel>
+
+      <!-- Brand hero -->
+      <Border x:Name="HeroBadge" Width="66" Height="66" CornerRadius="17" Background="White" HorizontalAlignment="Center">
+        <Border.Effect><DropShadowEffect BlurRadius="7" ShadowDepth="1" Opacity="0.15" /></Border.Effect>
+        <Grid>
+          <Rectangle x:Name="HeroGlyph" Width="44" Height="44" Fill="{StaticResource BrandGradient}">
+            <Rectangle.OpacityMask><ImageBrush ImageSource="pack://application:,,,/Assets/glyph.png" Stretch="Uniform" /></Rectangle.OpacityMask>
+          </Rectangle>
+          <TextBlock x:Name="HeroCheck" Text="&#x2713;" FontSize="34" FontWeight="SemiBold" Foreground="White"
+                     HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed" />
+        </Grid>
+      </Border>
+
+      <TextBlock x:Name="Headline" Text="Welcome to Claude RTL" FontSize="21" FontWeight="SemiBold"
+                 HorizontalAlignment="Center" Margin="0,15,0,0" />
+      <TextBlock x:Name="Subtitle" Text="Smooth Hebrew &amp; Arabic for Claude, done right."
+                 FontSize="13" Foreground="{StaticResource Muted}" HorizontalAlignment="Center" Margin="0,3,0,0"
+                 TextAlignment="Center" TextWrapping="Wrap" />
+
+      <!-- What you get / transparency bullets -->
+      <StackPanel x:Name="Bullets" Margin="2,22,2,0">
+        <Grid Margin="0,0,0,15">
+          <Grid.ColumnDefinitions><ColumnDefinition Width="26" /><ColumnDefinition /></Grid.ColumnDefinitions>
+          <TextBlock Text="&#x202B;&#x2192;&#x202C;" FontSize="15" Foreground="{StaticResource Brand}" VerticalAlignment="Top" Margin="0,1,0,0" />
+          <StackPanel Grid.Column="1">
+            <TextBlock Text="Right-to-left, automatically" FontWeight="SemiBold" FontSize="13.5" />
+            <TextBlock Text="Detects Hebrew &amp; Arabic and aligns the text direction — without breaking English or code."
+                       FontSize="12.5" Foreground="{StaticResource Muted}" TextWrapping="Wrap" LineHeight="18" Margin="0,2,0,0" />
+          </StackPanel>
+        </Grid>
+
+        <Grid Margin="0,0,0,15">
+          <Grid.ColumnDefinitions><ColumnDefinition Width="26" /><ColumnDefinition /></Grid.ColumnDefinitions>
+          <TextBlock Text="&#x1F510;" FontSize="14" VerticalAlignment="Top" Margin="0,1,0,0" />
+          <StackPanel Grid.Column="1">
+            <TextBlock Text="Keeps Cowork working" FontWeight="SemiBold" FontSize="13.5" />
+            <TextBlock x:Name="CoworkBullet"
+                       Text="With your one-time admin approval, it re-signs Claude and adds a certificate to Windows Trusted Root so Cowork keeps trusting it."
+                       FontSize="12.5" Foreground="{StaticResource Muted}" TextWrapping="Wrap" LineHeight="18" Margin="0,2,0,0" />
+          </StackPanel>
+        </Grid>
+
+        <Grid>
+          <Grid.ColumnDefinitions><ColumnDefinition Width="26" /><ColumnDefinition /></Grid.ColumnDefinitions>
+          <TextBlock Text="&#x2713;" FontSize="14" Foreground="{StaticResource OkGreen}" VerticalAlignment="Top" Margin="0,1,0,0" />
+          <StackPanel Grid.Column="1">
+            <TextBlock Text="Private &amp; reversible" FontWeight="SemiBold" FontSize="13.5" />
+            <TextBlock Text="Zero telemetry, nothing sent anywhere. Every original file is backed up — Restore anytime."
+                       FontSize="12.5" Foreground="{StaticResource Muted}" TextWrapping="Wrap" LineHeight="18" Margin="0,2,0,0" />
+          </StackPanel>
+        </Grid>
+      </StackPanel>
+
+      <!-- Full technical detail (folded) -->
+      <Expander x:Name="DetailsExpander" Margin="2,18,2,0">
+        <Expander.Header><TextBlock Text="What exactly happens?" FontSize="12.5" Foreground="{StaticResource Muted}" /></Expander.Header>
+        <Border Background="{StaticResource CardBg}" CornerRadius="10" Padding="14" Margin="0,8,0,0"
+                BorderBrush="{StaticResource Hairline}" BorderThickness="1">
+          <TextBlock FontSize="12" TextWrapping="Wrap" Foreground="{StaticResource Ink}" LineHeight="18.5">
+            Claude RTL injects a small right-to-left script into Claude's interface bundles and turns off the
+            asar integrity fuse so the change can load. On the MSIX build, Cowork's service pins Anthropic's
+            certificate on Claude.exe — so to keep Cowork working it re-signs Claude.exe with a self-signed
+            certificate, swaps the matching certificate inside cowork-svc.exe, and adds that certificate to your
+            Windows <Run FontWeight="SemiBold">Trusted Root</Run> store (its private key is wiped after signing).<LineBreak /><LineBreak />
+            The patch lives inside Claude's own files, so it stays after you restart your PC. It re-applies
+            automatically when Claude updates (optional). Everything is backed up and fully reversible.
+          </TextBlock>
+        </Border>
+      </Expander>
+
+      <!-- Progress (shown during/after install) -->
+      <TextBlock x:Name="StatusMsg" Visibility="Collapsed" Margin="2,16,2,0" FontSize="12.5"
+                 Foreground="{StaticResource Brand}" TextWrapping="Wrap" />
+      <Border x:Name="LogBox" Visibility="Collapsed" Background="#1E1E22" CornerRadius="8" Padding="10" Height="120" Margin="2,9,2,0">
+        <ScrollViewer x:Name="LogScroll" VerticalScrollBarVisibility="Auto">
+          <TextBlock x:Name="LogText" FontFamily="Consolas" FontSize="11" Foreground="#D8D8DC" TextWrapping="Wrap" />
+        </ScrollViewer>
+      </Border>
+
+      <!-- Actions -->
+      <Button x:Name="InstallBtn" Style="{StaticResource BrandButton}" Margin="2,20,2,0" Content="Install RTL" Click="OnInstall" />
+      <Button x:Name="LaterBtn" HorizontalAlignment="Center" Style="{StaticResource GhostButton}" Margin="0,11,0,0" Content="Not now" Click="OnLater" />
+
+      <TextBlock FontSize="11" Foreground="{StaticResource Muted}" HorizontalAlignment="Center" Margin="0,14,0,2">
+        Made with <Run Foreground="{StaticResource Brand}">&#x2665;</Run> by Lior Shaya
+      </TextBlock>
+
+    </StackPanel>
+  </ScrollViewer>
+</Window>

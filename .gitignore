@@ -1,0 +1,16 @@
+node_modules/
+.DS_Store
+.claude/
+dist/
+# Per-build signing artifacts (reference the gitignored payload). The PUBLIC key
+# (desktop/trust/claude-rtl.pub) IS committed; the private key never leaves ~/.config.
+desktop/trust/MANIFEST.sha256
+desktop/trust/MANIFEST.sha256.sig
+gui/.build/
+gui/dist/
+helper/node_modules/
+helper/package-lock.json
+helper/sea-cli.bundle.js
+helper/sea-prep.blob
+helper/sea-config.json
+helper/claude-rtl-helper

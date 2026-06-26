@@ -1,0 +1,66 @@
+name: release
+
+# Tag a unified version on both platforms and publish a GitHub Release with both assets:
+#   git tag v0.2.0 && git push origin v0.2.0
+# The in-app "Check for updates" reads this release (Windows picks the *win*.exe asset).
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+      - name: Package (exe + scripts + payload + node runtime + installer)
+        shell: pwsh
+        run: ./gui/windows/package.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: gui/windows/dist/ClaudeRTL-Setup-*.exe
+          if-no-files-found: error
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build .app + .dmg
+        run: bash gui/make-dmg.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-dmg
+          path: gui/dist/Claude-RTL-*.dmg
+          if-no-files-found: error
+
+  release:
+    needs: [build-windows, build-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/windows-installer/*
+            artifacts/macos-dmg/*
+          generate_release_notes: true
+          fail_on_unmatched_files: true

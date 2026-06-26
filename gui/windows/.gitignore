@@ -1,0 +1,6 @@
+# .NET build output
+bin/
+obj/
+
+# packaging output (publish + stage + installer + downloaded node)
+dist/

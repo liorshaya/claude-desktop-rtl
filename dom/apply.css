@@ -1,0 +1,125 @@
+/* dom/apply.css — the declarative bulk of the RTL fix (§4).
+ * Apply at the LEAF-BLOCK level: unicode-bidi does NOT inherit, so each rule must sit
+ * on the actual <p>/<li>/<td>/… , never on a container. This per-leaf `plaintext` is
+ * the SOLE base-direction mechanism for prose (§3.2, §8.K) — no JS ever sets dir on a
+ * prose block, so a mixed English/Hebrew document renders block-by-block with NO
+ * global flip. `plaintext` drives BOTH glyph order and `text-align: start` per block.
+ *
+ * Root anchors are claude.ai's real message containers (the legacy `.prose` is gone):
+ *   .standard-markdown / .font-claude-response  → assistant message markdown
+ *   [data-testid="user-message"]                → user message
+ * `.prose` / `.font-claude-message` are kept as forward/back-compat fallbacks.
+ *
+ * Claude HARD-SETS `unicode-bidi: isolate` + base `direction: ltr` on these blocks via
+ * its own stylesheet, so we use a TARGETED `!important` on exactly the two properties it
+ * fights us on (unicode-bidi, text-align) — the narrowest reliable override per §4. The
+ * `:where()` root keeps specificity contributed by the container at 0. */
+
+:where(.prose, .standard-markdown, .font-claude-response, .font-claude-message, [data-testid="user-message"])
+  :is(p, li, h1, h2, h3, h4, h5, h6, blockquote, dt, dd, figcaption, caption, td, th) {
+  unicode-bidi: plaintext !important;
+  text-align: start !important;
+}
+
+/* Long unbreakable LTR tokens (URLs) inside RTL must not blow out the bubble. */
+:where(.prose, .standard-markdown, .font-claude-response, .font-claude-message, [data-testid="user-message"])
+  :is(p, li) {
+  overflow-wrap: anywhere;
+}
+
+/* RTL list markers/indent are handled by dir="auto" on each list/item (apply.js, §6) —
+ * that hangs the marker on the content's start side with the native gap. The [dir] rules
+ * below carry the direction. */
+
+/* Code & math NEVER reorder; isolate so neighbouring neutrals can't bleed in. Claude
+ * already isolates these — this is a safe backstop. */
+pre,
+.code-block__code {
+  direction: ltr;
+  unicode-bidi: isolate;
+  text-align: left;
+}
+code {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+.katex, .katex-display, mjx-container, math {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+/* §6/§12 — Artifacts & Cowork render user-authored content in a sandbox iframe with no
+ * .standard-markdown root. JS tags the document data-rtl-artifact; apply per-leaf RTL to
+ * EVERY block there (each self-determines via plaintext; explicit dir attrs still win). */
+:where([data-rtl-artifact]) :is(p, li, h1, h2, h3, h4, h5, h6, blockquote, dt, dd,
+  figcaption, caption, td, th) {
+  unicode-bidi: plaintext !important;
+  text-align: start !important;
+}
+:where([data-rtl-artifact]) :is(p, li) { overflow-wrap: anywhere; }
+
+/* §8.D — a fenced block the engine judged to be RTL prose (Hebrew text Claude wrapped in
+ * ``` ), tagged by JS. Render it per-line RTL like prose; real code never gets this tag,
+ * so it stays LTR via the rules above. text-align:start follows the per-line `plaintext`
+ * direction, so Hebrew lines right-align. */
+pre[data-rtl-text],
+pre[data-rtl-text] code {
+  unicode-bidi: plaintext !important;
+  text-align: start !important;
+  /* Code blocks shrink-wrap inside an overflow-x-auto scroller, leaving text-align no
+   * room — force full-width block so every line anchors to the same right edge. */
+  display: block !important;
+  width: 100% !important;
+}
+
+/* §8.F — visual-only arrow mirroring. JS wraps each arrow that sits in an RTL block; the
+ * character is untouched (copy/Ctrl-F unchanged), only the glyph is flipped. */
+[data-rtl-arrow] {
+  display: inline-block;
+  transform: scaleX(-1);
+}
+
+/* Islands wrapped by JS (§3.6) isolate like UBA isolates; nesting works. */
+[data-rtl-island] {
+  unicode-bidi: isolate;
+}
+
+/* Explicit dir attributes win; tables flip column order (the only dir JS writes on
+ * block content, §3.2). */
+[dir="rtl"] { direction: rtl; }
+[dir="ltr"] { direction: ltr; }
+table[dir="rtl"] { direction: rtl; }
+
+/* Table cells align to the TABLE's direction, NOT per-cell — so every column lines up
+ * cleanly with the header on the same edge (§3.2). `isolate` (vs the per-block `plaintext`
+ * above) makes text-align:start follow the cell's inherited direction = the table's: all
+ * cells right in an RTL table, all left in an LTR one. Content still orders correctly
+ * within each cell. This rule comes after the leaf-block rule, so it wins for td/th. */
+:where(.prose, .standard-markdown, .font-claude-response, .font-claude-message, [data-testid="user-message"], [data-rtl-artifact])
+  :is(td, th) {
+  unicode-bidi: isolate !important;
+  text-align: start !important;
+}
+
+/* Claude draws the blockquote bar with a PHYSICAL border-left (Tailwind border-l-4) +
+ * padding-left + margin-left, which dir="rtl" can't flip. Move the bar and indent to the
+ * right for an RTL blockquote. Width/style fixed; colour inherits Claude's border-color. */
+blockquote[dir="rtl"] {
+  border-left-width: 0 !important;
+  border-right-width: 4px !important;
+  border-right-style: solid !important;
+  padding-left: 0 !important;
+  padding-right: 1rem !important;
+  margin-left: 0 !important;
+  margin-right: 0.5rem !important;
+}
+
+/* Same physical-property issue for NESTED lists: Claude indents them with padding-left
+ * (pl-8 = 2rem) which dir="rtl" can't flip, so deeper RTL levels don't step inward from
+ * the right. Move that indent to the right. Only nested RTL lists; top-level + LTR keep
+ * Claude's spacing. */
+:where(.prose, .standard-markdown, .font-claude-response, .font-claude-message, [data-testid="user-message"], [data-rtl-artifact])
+  :is(ul, ol) :is(ul, ol)[dir="rtl"] {
+  padding-left: 0 !important;
+  padding-right: 2rem !important;
+}
