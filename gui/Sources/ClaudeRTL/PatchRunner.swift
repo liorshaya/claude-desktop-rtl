@@ -1,4 +1,5 @@
 import Foundation
+import ServiceManagement
 
 // One source of truth = the bash scripts. This wraps them via Process and parses status.
 // (Step 2 will swap the Node dependency for a bundled standalone asar/fuses binary so the
@@ -26,6 +27,7 @@ final class PatchRunner: ObservableObject {
     @Published var log = ""
     @Published var busy = false
     @Published var updateCheck: UpdateCheck = .idle
+    @Published var launchAtLogin = false
 
     // This manager's own version (baked into Info.plist from the repo's VERSION file).
     let managerVersion = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "dev"
@@ -82,6 +84,19 @@ final class PatchRunner: ObservableObject {
         s.patchedVersion = Self.version(in: out, line: "patched")
         s.originalRunning = await isOriginalRunning()
         status = s
+        launchAtLogin = (SMAppService.mainApp.status == .enabled)
+    }
+
+    // Launch this manager at login (mirrors the Windows "Start with Windows" toggle). SMAppService
+    // registers the app itself as a login item; no admin, no helper bundle. macOS 13+.
+    func setLaunchAtLogin(_ on: Bool) {
+        do {
+            if on { try SMAppService.mainApp.register() }
+            else  { try SMAppService.mainApp.unregister() }
+        } catch {
+            log += "login item: \(error.localizedDescription)\n"
+        }
+        launchAtLogin = (SMAppService.mainApp.status == .enabled)
     }
 
     func install() async { busy = true; log = ""; await runPatch(["--install"]); await refresh(); busy = false }

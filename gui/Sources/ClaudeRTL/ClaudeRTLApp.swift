@@ -146,6 +146,13 @@ struct ContentView: View {
                 }
             }
             .toggleStyle(.switch).controlSize(.small).font(.callout)
+            Toggle(isOn: loginBinding) {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Start at login")
+                    Text("Open Claude RTL automatically when you sign in").font(.caption2).foregroundStyle(.secondary)
+                }
+            }
+            .toggleStyle(.switch).controlSize(.small).font(.callout)
         }
     }
 
@@ -279,5 +286,9 @@ struct ContentView: View {
     // MARK: - Helpers
     private var watchBinding: Binding<Bool> {
         Binding(get: { s.watcherActive }, set: { v in Task { await runner.setWatch(v) } })
+    }
+
+    private var loginBinding: Binding<Bool> {
+        Binding(get: { runner.launchAtLogin }, set: { v in runner.setLaunchAtLogin(v) })
     }
 }
