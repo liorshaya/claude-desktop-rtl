@@ -246,6 +246,7 @@ struct ContentView: View {
             if showDetails {
                 Text("First install: macOS asks for your keychain password — click **Always Allow**. A blank first window? Quit (⌘Q) and reopen.")
                     .font(.caption2).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)   // wrap to full height, never truncate
                 if !runner.log.isEmpty {
                     ScrollView {
                         Text(runner.log)
