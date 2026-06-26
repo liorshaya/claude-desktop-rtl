@@ -182,6 +182,15 @@ final class PatchRunner: ObservableObject {
         } catch {
             updateCheck = .failed("offline?")
         }
+        // "Up to date" / "offline?" must not stick forever: the popup view persists across opens,
+        // so revert to the clickable button after a moment. An ".available" result stays put.
+        if case .available = updateCheck { } else {
+            let shown = updateCheck
+            Task {
+                try? await Task.sleep(nanoseconds: 3_500_000_000)
+                if self.updateCheck == shown { self.updateCheck = .idle }
+            }
+        }
     }
 
     // Download the release .dmg and open it (Finder shows the drag-to-Applications window). No

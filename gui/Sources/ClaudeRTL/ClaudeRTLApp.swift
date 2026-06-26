@@ -72,19 +72,16 @@ struct ContentView: View {
         VStack(spacing: 0) {
             header
             Divider()
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    stateBadge
-                    controls
-                    if s.originalRunning { warning }
-                    primaryButton
-                    secondaryRow
-                    if runner.busy { workingRow }
-                    details
-                }
-                .padding(16)
+            VStack(alignment: .leading, spacing: 14) {
+                stateBadge
+                controls
+                if s.originalRunning { warning }
+                primaryButton
+                secondaryRow
+                if runner.busy { workingRow }
+                details
             }
-            .frame(maxHeight: 520)   // cap the popover; expanded Details scrolls instead of clipping
+            .padding(16)
         }
         .frame(width: 326)
         .animation(.easeInOut(duration: 0.22), value: s.patchedInstalled)
@@ -239,7 +236,7 @@ struct ContentView: View {
                             .font(.system(.caption2, design: .monospaced))
                             .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    .frame(height: 108)
+                    .frame(height: 80)
                     .padding(8)
                     .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
                 }
