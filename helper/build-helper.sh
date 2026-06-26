@@ -28,8 +28,9 @@ node --experimental-sea-config sea-config.json
 echo "helper: injecting blob into a copy of node…"
 cp "$(command -v node)" claude-rtl-helper
 # A universal node carries the SEA sentinel in every slice → postject sees duplicates.
-# Thin to the native arch first.
-if lipo -info claude-rtl-helper 2>/dev/null | grep -q "fat file"; then
+# Thin to the native arch first. (Match the fat-file banner exactly: a THIN binary's
+# "Non-fat file: ..." also contains the substring "fat file" — don't false-positive on it.)
+if lipo -info claude-rtl-helper 2>/dev/null | grep -q "Architectures in the fat file"; then
   lipo claude-rtl-helper -thin "$(uname -m)" -output claude-rtl-helper.thin
   mv claude-rtl-helper.thin claude-rtl-helper
 fi
