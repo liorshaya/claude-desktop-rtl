@@ -59,6 +59,27 @@ private struct BrandButton: ButtonStyle {
     }
 }
 
+// Forces the MenuBarExtra panel to track the SwiftUI content's exact height (grow AND shrink).
+// MenuBarExtra(.window) only ever grows the panel, so without this the window keeps its largest
+// size and the content ends up un-anchored with a transparent gap. We resize the panel to the
+// content's fitting height, keeping the top edge fixed (it drops down from the menu bar).
+private struct WindowResizer: NSViewRepresentable {
+    var trigger: String
+    func makeNSView(context: Context) -> NSView { NSView(frame: .zero) }
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async {
+            guard let win = nsView.window, let content = win.contentView else { return }
+            let target = content.fittingSize.height
+            guard target > 1, abs(win.frame.height - target) > 0.5 else { return }
+            var f = win.frame
+            let top = f.maxY                 // keep the top edge anchored to the menu bar
+            f.size.height = target
+            f.origin.y = top - target
+            win.setFrame(f, display: true)
+        }
+    }
+}
+
 struct ContentView: View {
     @ObservedObject var runner: PatchRunner
     @State private var showDetails = false
@@ -84,14 +105,12 @@ struct ContentView: View {
             .padding(16)
         }
         .frame(width: 326)
-        // Size the window to the content's exact height so it grows when Details opens AND shrinks
-        // back when it closes (without this a MenuBarExtra .window keeps the larger frame on
-        // collapse, leaving the content un-anchored with a transparent gap at the top).
         .fixedSize(horizontal: false, vertical: true)
-        .animation(.easeInOut(duration: 0.22), value: s.patchedInstalled)
-        .animation(.easeInOut(duration: 0.22), value: needsUpdate)
-        .animation(.easeInOut(duration: 0.22), value: s.originalRunning)
-        .animation(.easeInOut(duration: 0.22), value: runner.busy)
+        // MenuBarExtra(.window) grows its panel to fit content but never shrinks it back (the
+        // "high-water-mark" bug) - leaving a transparent gap above the content when Details closes.
+        // WindowResizer grabs the hosting panel and forces its height to the content's exact fitting
+        // size on every layout, anchored at the top edge, so it grows AND shrinks cleanly.
+        .background(WindowResizer(trigger: "\(showDetails)|\(runner.busy)|\(s.originalRunning)|\(s.patchedInstalled)|\(needsUpdate)"))
     }
 
     // MARK: - Header
