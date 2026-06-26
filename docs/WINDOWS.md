@@ -74,13 +74,6 @@ update. The macOS "patch a copy" hard rule is therefore **relaxed for the Squirr
 `claude.exe` + `app.asar` to `.crtl-bak` so the user can restore). The **MSIX** policy stays open
 (deferred until there is an MSIX box to verify on).
 
-### 3.2 Prior art — the Windows sibling project
-
-[`shraga100/claude-desktop-rtl-patch`](https://github.com/shraga100/claude-desktop-rtl-patch)
-(PowerShell) is effectively this port already, and resolved most unknowns: MSIX ACL handling,
-the asar-hash byte-replace, the `cowork-svc.exe` certificate swap, and a Scheduled-Task watcher.
-**Read it end-to-end on a Windows box before writing our pipeline** — it is the gold reference.
-
 ## 4. Pipeline mapped 1:1 to the macOS steps
 
 `desktop/patch.sh` is the source pipeline to port. Drop / keep / change:
@@ -309,14 +302,13 @@ Two stacked, **Anthropic-side** blockers:
 
 **RTL-vs-Cowork tension:** on this machine Cowork is unreachable regardless of the RTL patch.
 Migrating to MSIX is painful, **breaks the Squirrel RTL patch** (MSIX = read-only `WindowsApps`,
-anti-tamper — the unsolved §3 hard case; the shraga100 prior art does not cover MSIX either), and —
+anti-tamper — the unsolved §3 hard case), and —
 because of blocker #2 — likely still would not yield Cowork on build 26200. **Recommendation:** stay
 on Squirrel + RTL; track #28238 / #29322; revisit MSIX RTL support only once Anthropic fixes
 `yukonSilver`. (Cowork's "hand off long tasks" capability is already covered by Claude Code.)
 
 ## 13. Sources
 
-- Prior art: [shraga100/claude-desktop-rtl-patch](https://github.com/shraga100/claude-desktop-rtl-patch)
 - [Deploy Claude Desktop for Windows](https://support.claude.com/en/articles/12622703-deploy-claude-desktop-for-windows) · [Squirrel→MSIX transition #25162](https://github.com/anthropics/claude-code/issues/25162)
 - Electron: [asar integrity](https://www.electronjs.org/docs/latest/tutorial/asar-integrity) · [fuses](https://www.electronjs.org/docs/latest/tutorial/fuses) · [code signing](https://www.electronjs.org/docs/latest/tutorial/code-signing) · [@electron/asar](https://github.com/electron/asar) · [CVE-2025-55305](https://github.com/advisories/GHSA-vmqv-hx8q-j7mg)
 - MSIX: [behind the scenes](https://learn.microsoft.com/en-us/windows/msix/desktop/desktop-to-uwp-behind-the-scenes) · [limitations](https://www.turbo.net/blog/posts/2025-06-16-understanding-msix-limitations-enterprise-application-compatibility) · [unsigned package](https://learn.microsoft.com/en-us/windows/msix/package/unsigned-package)

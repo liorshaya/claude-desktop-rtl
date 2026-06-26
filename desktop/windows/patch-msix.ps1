@@ -9,8 +9,8 @@
   re-sign Claude.exe with our own self-signed cert AND swap the cert cowork-svc.exe expects, so the
   service trusts the re-signed Claude.exe again.
 
-  The cert-dance technique (cowork-svc binary cert-swap + Trusted-Root install) follows
-  shraga100/claude-desktop-rtl-patch (MIT).
+  The cert-dance (cowork-svc binary cert-swap + Trusted-Root install) is implemented here from
+  first principles against the observed cowork-svc behavior.
 
   REQUIRES: an elevated PowerShell (Run as administrator) + Node.
 
@@ -153,7 +153,7 @@ function Start-Cowork {
   }
 }
 
-# --- byte search via ISO-8859-1 string IndexOf (native, fast) - follows shraga100 ---
+# --- byte search via ISO-8859-1 string IndexOf (native, fast) ---
 function Find-Bytes([byte[]]$Haystack, [byte[]]$Needle, [int]$StartIndex = 0) {
   if (-not $Needle -or $Needle.Length -eq 0 -or -not $Haystack -or $Haystack.Length -lt $Needle.Length) { return -1 }
   if ($StartIndex -lt 0) { $StartIndex = 0 }

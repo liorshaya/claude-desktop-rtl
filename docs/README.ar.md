@@ -15,7 +15,8 @@
 </p>
 
 <p align="center">
-  <img alt="Platform" src="https://img.shields.io/badge/desktop-macOS%2013%2B-000000?logo=apple&logoColor=white">
+  <img alt="macOS" src="https://img.shields.io/badge/macOS-13%2B-000000?logo=apple&logoColor=white">
+  <img alt="Windows" src="https://img.shields.io/badge/Windows-10%20%2F%2011-0078D6?logo=windows&logoColor=white">
   <img alt="Browser" src="https://img.shields.io/badge/browser-any%20OS%20(userscript)-4c9a2a">
   <img alt="License" src="https://img.shields.io/badge/license-MIT-3b82f6">
   <img alt="Network" src="https://img.shields.io/badge/network-zero-16a34a">
@@ -28,12 +29,20 @@
 
 يكتب Claude نصوصًا عربية وعبرية جميلة — لكنه يعرضها **من اليسار إلى اليمين**: النقاط في الجهة الخاطئة، وعلامات الترقيم تقفز إلى آخر السطر، والجداول تتدفّق بالعكس. يصلح **Claude RTL** ذلك في كل مكان يعمل فيه Claude، **دون أن يمسّ نصّك أو شبكتك إطلاقًا**.
 
+<p align="center">
+  <img src="../assets/language/claude-rtl-comparison.png" alt="نفس ردّ Claude بدون وبوجود Claude RTL — جداول وقوائم ونصوص عربية تُعرض من اليسار إلى اليمين (معطوبة) مقابل من اليمين إلى اليسار (صحيحة)" width="92%">
+</p>
+
+<p align="center">
+  <sub><b>بدون</b> RTL يُعرض الردّ نفسه من اليسار إلى اليمين — أعمدة جداول معكوسة وعلامات ترقيم في الجهة الخاطئة. <b>وبوجوده</b>، تُقرأ كل كتلة بشكل صحيح.</sub>
+</p>
+
 ## لماذا هو مختلف
 
 - 🎯 **اتجاه لكل كتلة، بشكل صحيح.** كل فقرة وقائمة وجدول واقتباس تقرّر اتجاهها **بنفسها** حسب محتواها **هي**. تبقى الكتل الإنجليزية LTR وتنقلب الكتل العربية RTL — **في المستند نفسه**، دون انقلاب شامل (العلّة الموجودة في كل أداة أخرى).
 - 🔒 **صفر شبكة. صفر تتبّع. صفر تخزين بيانات.** محادثاتك لا تغادر جهازك. النسخ وCtrl-F يبقيان **بايتًا ببايت** — لا نحقن أبدًا أي محارف يونيكود خفيّة.
 - 🛡️ **آمن بحكم التصميم.** نسخة Claude الأصلية لديك **لا تُعدّل أبدًا**. نُصلح نسخة منفصلة، وهي **تنجو من تحديثات Claude تلقائيًا**.
-- 🖥️ **سطح المكتب *والمتصفّح*، بمحرّك واحد.** تطبيق في شريط القوائم بنقرة واحدة لـClaude Desktop، وuserscript لـclaude.ai في أي متصفّح — يتشاركان المحرّك ذاته.
+- 🖥️ **سطح المكتب *والمتصفّح*، بمحرّك واحد.** تطبيق في شريط القوائم على macOS وتطبيق في شريط النظام (tray) على Windows لـClaude Desktop، إضافةً إلى userscript لـclaude.ai في أي متصفّح — جميعها تتشارك المحرّك ذاته.
 - 🧪 **نواة نقية ومُختبَرة.** ذكاء الـbidi (`engine/`) خالٍ من الـDOM ومغطّى بمجموعة اختبارات قاسية، منفصل عن طريقة التوصيل.
 
 ## ماذا يعالج
@@ -50,7 +59,23 @@
 | حقول الإدخال/التحرير | `dir="auto"` فورًا، دون وميض |
 | مستند مختلط إنجليزي/عربي | كل كتلة تقرّر بنفسها — دون انقلاب شامل |
 
+## ✅ المنصّات المدعومة
+
+| السطح | المتطلّبات |
+|---|---|
+| 🍎 **macOS Desktop** | macOS 13 (Ventura) أو أحدث. ملف الـ`.dmg` الجاهز لمعالجات Apple Silicon؛ أجهزة Intel يمكنها البناء من المصدر. |
+| 🪟 **Windows Desktop** | Windows 10 أو 11 (64‑بت). يُرقّع **كلا** تثبيتَي Claude — المُثبّت الكلاسيكي من claude.ai *و*نسخة Microsoft Store (MSIX). |
+| 🌐 **المتصفّح — claude.ai** | أي نظام تشغيل. Chrome أو Edge أو Firefox أو Safari مع مدير userscript. |
+
 ## 🚀 التثبيت
+
+<p align="center">
+  <img src="../assets/language/claude-rtl-showcase.png" alt="مُدير Claude RTL — تطبيق شريط القوائم على macOS وتطبيق شريط النظام على Windows، وكلاهما يعرض ‏“RTL is active”" width="80%">
+</p>
+
+<p align="center">
+  <sub>المُدير بنقرة واحدة — على <b>macOS</b> (شريط القوائم) و<b>Windows</b> (شريط النظام). يُثبّت ويُحدّث تلقائيًا ويُزيل RTL، دون طرفية.</sub>
+</p>
 
 ### macOS Desktop — الطريقة السهلة (موصى بها)
 
@@ -78,6 +103,20 @@ open "dist/Claude RTL.app"
 فعّل **“Keep RTL after Claude updates”** ليُعيد تطبيق نفسه عند كل تحديث لـClaude. زر **Check for updates** (ضمن *Details*) يجلب إصدارات أحدث من التطبيق نفسه.
 
 > نسخة Claude الأصلية في `/Applications` لا تُمسّ. زر “Open Claude-RTL” يُغلق الأصلية أولًا (لا يمكنهما العمل معًا). نافذة أولى فارغة؟ أغلق (⌘Q) وأعد الفتح.
+
+### Windows Desktop
+
+تطبيق في شريط النظام (tray) يُثبّت ويُحدّث ويُزيل RTL — **دون Node، ودون طرفية، ودون تثبيت أي شيء مسبقًا** (بيئة تشغيل محمولة مُضمّنة في المُثبّت).
+
+1. نزّل **`ClaudeRTL-Setup.exe`** من [أحدث إصدار](https://github.com/liorshaya/claude-desktop-rtl/releases/latest) وشغّله. إنه تثبيت **لكل مستخدم** — لا يحتاج صلاحيات مسؤول.
+2. شغّل **Claude RTL** من قائمة ابدأ واضغط الزر لترقيع Claude. يكتشف التطبيق كيفية تثبيت Claude ويُطبّق RTL في مكانه، مع نسخ احتياطي للأصل أولًا.
+3. افتح Claude — تُعرض العربية والعبرية والفارسية بـRTL.
+
+فعّل **“Keep RTL after Claude updates”** ليُعيد تطبيق نفسه تلقائيًا بعد كل تحديث لـClaude.
+
+> يعمل مع **كلا** التثبيتَين: ملف الـ`.exe` الكلاسيكي من claude.ai *و*نسخة Microsoft Store (MSIX). في نسخة الـStore، يطلب تطبيق RTL **موافقة مسؤول** لمرة واحدة (UAC) — إذ يُعيد توقيع Claude بشهادة محلية ليبقى Cowork يعمل، و**“Restore original” يُرجع كل شيء كما كان**. الأصل دائمًا مُحتفَظ به كنسخة احتياطية.
+
+تفضّل سطر الأوامر؟ خط أنابيب PowerShell موثّق في **[desktop/windows/README.md](../desktop/windows/README.md)**.
 
 ### المتصفّح — claude.ai (أي نظام)
 

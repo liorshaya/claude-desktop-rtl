@@ -40,8 +40,9 @@ It needs **Node** (for the byte-exact `inject.mjs` and `npx @electron/asar` / `@
 Undo anytime with `patch.ps1 -Restore`; inspect state with `patch.ps1 -Status`. Then open Claude —
 Hebrew/Arabic/Persian render RTL.
 
-> Only the legacy **Squirrel** install is supported today (the common case for existing users).
-> **MSIX** (new installs since 2026-02-10) is not yet handled — see [../../docs/WINDOWS.md](../../docs/WINDOWS.md) §3.
+> This is the **Squirrel** (classic installer) path. For the **Microsoft Store (MSIX)** install,
+> run `patch-msix.ps1` from an **elevated** PowerShell instead — same RTL payload, plus the
+> ownership + Cowork certificate handling MSIX requires. See [../../docs/WINDOWS.md](../../docs/WINDOWS.md) §3.
 
 ## Step 3 (optional): survive Claude updates
 
@@ -59,9 +60,9 @@ patched?" read-only, so it never disturbs a running, patched Claude; if a fresh 
 running, it defers and RTL applies on the next launch. Updates stay fully automatic — you run
 nothing by hand. Logs: `%LOCALAPPDATA%\claude-rtl\watch.log`.
 
-## Later (per docs/WINDOWS.md §11)
+## The one-click app
 
-The Node-SEA `claude-rtl-helper.exe` (no system Node needed; P7.2), the WPF tray GUI `gui/windows`
-(P7.4), and the Inno Setup per-user installer (P7.5).
-
-Prior art to mine: [shraga100/claude-desktop-rtl-patch](https://github.com/shraga100/claude-desktop-rtl-patch).
+Most users don't need the scripts above. The **`ClaudeRTL-Setup.exe`** installer ships a WPF tray
+app (`gui/windows`) that bundles a portable Node runtime, the prebuilt payload, and these scripts —
+so it patches with zero prerequisites and auto-detects the Squirrel vs MSIX install. Download it from
+the [latest release](https://github.com/liorshaya/claude-desktop-rtl/releases/latest).

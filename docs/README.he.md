@@ -15,7 +15,8 @@
 </p>
 
 <p align="center">
-  <img alt="Platform" src="https://img.shields.io/badge/desktop-macOS%2013%2B-000000?logo=apple&logoColor=white">
+  <img alt="macOS" src="https://img.shields.io/badge/macOS-13%2B-000000?logo=apple&logoColor=white">
+  <img alt="Windows" src="https://img.shields.io/badge/Windows-10%20%2F%2011-0078D6?logo=windows&logoColor=white">
   <img alt="Browser" src="https://img.shields.io/badge/browser-any%20OS%20(userscript)-4c9a2a">
   <img alt="License" src="https://img.shields.io/badge/license-MIT-3b82f6">
   <img alt="Network" src="https://img.shields.io/badge/network-zero-16a34a">
@@ -28,12 +29,20 @@
 
 Claude כותב עברית וערבית יפות — אבל מרנדר אותן **משמאל לימין**: נקודות בצד הלא נכון, סימני פיסוק שקופצים לקצה השורה, טבלאות שזורמות הפוך. **Claude RTL** מתקן את זה בכל מקום שבו Claude רץ, **בלי לגעת בטקסט שלך ובלי לגעת ברשת**.
 
+<p align="center">
+  <img src="../assets/language/claude-rtl-comparison.png" alt="אותה תשובה של Claude בלי ועם Claude RTL — טבלאות, רשימות וטקסט עברי מרונדרים משמאל לימין (שבור) מול ימין לשמאל (תקין)" width="92%">
+</p>
+
+<p align="center">
+  <sub><b>בלי</b> RTL אותה תשובה מרונדרת משמאל לימין — עמודות טבלה הפוכות, פיסוק בצד הלא נכון. <b>איתו</b>, כל בלוק נקרא נכון.</sub>
+</p>
+
 ## למה זה שונה
 
 - 🎯 **כיוון per-block, כמו שצריך.** כל פסקה, רשימה, טבלה וציטוט מחליטים על הכיוון של **עצמם** לפי התוכן של **עצמם**. בלוקים באנגלית נשארים LTR ובלוקים בעברית מתהפכים RTL — **באותו מסמך**, בלי היפוך גלובלי (הבאג שיש לכל כלי אחר).
 - 🔒 **אפס רשת. אפס טלמטריה. אפס אחסון נתונים.** השיחות שלך לא עוזבות את המחשב. העתקה ו‑Ctrl-F נשארים **בייט‑לבייט** — לעולם לא מזריקים תווי יוניקוד נסתרים.
 - 🛡️ **בטוח מעצם הבנייה.** ה‑Claude המקורי שלך **לעולם לא משתנה**. אנחנו מתקנים עותק נפרד, והוא **שורד עדכוני Claude אוטומטית**.
-- 🖥️ **דסקטוp *וגם* דפדפן, מנוע אחד.** אפליקציית menu-bar בקליק ל‑Claude Desktop, ו‑userscript ל‑claude.ai בכל דפדפן — חולקים בדיוק את אותו מנוע bidi.
+- 🖥️ **דסקטופ *וגם* דפדפן, מנוע אחד.** אפליקציית menu-bar ב‑macOS ואפליקציית tray ב‑Windows ל‑Claude Desktop, וגם userscript ל‑claude.ai בכל דפדפן — כולם חולקים בדיוק את אותו מנוע bidi.
 - 🧪 **ליבה טהורה ובדוקה.** האינטליגנציה (`engine/`) נטולת‑DOM ומכוסה ב‑corpus של מקרי קצה, מנותקת מאופן ההפצה.
 
 ## מה זה מטפל
@@ -50,7 +59,23 @@ Claude כותב עברית וערבית יפות — אבל מרנדר אותן 
 | תיבות קלט/עריכה | `dir="auto"`, מיידי, בלי ריצוד |
 | מסמך מעורב אנגלית/עברית | כל בלוק מחליט לעצמו — בלי היפוך גלובלי |
 
+## ✅ פלטפורמות נתמכות
+
+| משטח | דרישות |
+|---|---|
+| 🍎 **macOS Desktop** | macOS 13 (Ventura) ומעלה. ה‑`.dmg` המוכן הוא ל‑Apple Silicon; מחשבי Intel יכולים לבנות מהמקור. |
+| 🪟 **Windows Desktop** | Windows 10 או 11 (64‑bit). מתקן **את שתי** ההתקנות של Claude — גם המתקין הקלאסי מ‑claude.ai וגם גרסת ה‑Microsoft Store (MSIX). |
+| 🌐 **דפדפן — claude.ai** | כל מערכת הפעלה. Chrome, Edge, Firefox או Safari עם מנהל userscript. |
+
 ## 🚀 התקנה
+
+<p align="center">
+  <img src="../assets/language/claude-rtl-showcase.png" alt="המנהל של Claude RTL — אפליקציית menu-bar ב‑macOS ואפליקציית tray ב‑Windows, שתיהן מציגות ‏“RTL is active”" width="80%">
+</p>
+
+<p align="center">
+  <sub>המנהל בקליק אחד — ב‑<b>macOS</b> (שורת התפריט) וב‑<b>Windows</b> (שורת המשימות). מתקין, מעדכן אוטומטית ומסיר RTL, בלי טרמינל.</sub>
+</p>
 
 ### macOS Desktop — הדרך הקלה (מומלץ)
 
@@ -78,6 +103,20 @@ open "dist/Claude RTL.app"
 הפעל את **“Keep RTL after Claude updates”** והוא יחיל את עצמו מחדש בכל עדכון של Claude. **Check for updates** (תחת *Details*) מושך גרסאות חדשות של האפליקציה עצמה.
 
 > ה‑Claude המקורי ב‑`/Applications` לעולם לא נגע. “Open Claude-RTL” סוגר קודם את המקורי (הם לא יכולים לרוץ יחד). חלון ראשון לבן? צא (⌘Q) ופתח שוב.
+
+### Windows Desktop
+
+אפליקציית tray מתקינה, מעדכנת ומסירה RTL — **בלי Node, בלי טרמינל, ובלי להתקין שום דבר מראש** (runtime נייד מצורף למתקין).
+
+1. הורד את **`ClaudeRTL-Setup.exe`** מ‑[הגרסה האחרונה](https://github.com/liorshaya/claude-desktop-rtl/releases/latest) והרץ. זו התקנה **per-user** — בלי הרשאות מנהל.
+2. הפעל את **Claude RTL** מתפריט ההתחלה ולחץ על הכפתור כדי לתקן את Claude. האפליקציה מזהה איך Claude מותקן ומחילה RTL במקום, עם גיבוי המקור קודם.
+3. פתח את Claude — עברית, ערבית ופרסית מרונדרות RTL.
+
+הפעל את **“Keep RTL after Claude updates”** והוא יחיל את עצמו מחדש אוטומטית אחרי כל עדכון של Claude.
+
+> עובד עם **שתי** ההתקנות: גם ה‑`.exe` הקלאסי מ‑claude.ai וגם גרסת ה‑Microsoft Store (MSIX). בגרסת ה‑Store, החלת RTL מבקשת **אישור מנהל** חד‑פעמי (UAC) — היא חותמת מחדש את Claude עם תעודה מקומית כדי ש‑Cowork ימשיך לעבוד, ו‑**“Restore original” מחזיר הכול לקדמותו**. המקור תמיד מגובה.
+
+מעדיף שורת פקודה? צינור ה‑PowerShell מתועד ב‑**[desktop/windows/README.md](../desktop/windows/README.md)**.
 
 ### דפדפן — claude.ai (כל מערכת הפעלה)
 

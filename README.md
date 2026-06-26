@@ -15,7 +15,8 @@
 </p>
 
 <p align="center">
-  <img alt="Platform" src="https://img.shields.io/badge/desktop-macOS%2013%2B-000000?logo=apple&logoColor=white">
+  <img alt="macOS" src="https://img.shields.io/badge/macOS-13%2B-000000?logo=apple&logoColor=white">
+  <img alt="Windows" src="https://img.shields.io/badge/Windows-10%20%2F%2011-0078D6?logo=windows&logoColor=white">
   <img alt="Browser" src="https://img.shields.io/badge/browser-any%20OS%20(userscript)-4c9a2a">
   <img alt="License" src="https://img.shields.io/badge/license-MIT-3b82f6">
   <img alt="Network" src="https://img.shields.io/badge/network-zero-16a34a">
@@ -26,12 +27,20 @@
 
 Claude writes beautiful Hebrew and Arabic — then renders it **left-to-right**: bullets on the wrong side, sentence-final punctuation jumping across the line, tables flowing backwards. **Claude RTL** fixes that everywhere Claude runs, and it does it **without ever touching your text or your network**.
 
+<p align="center">
+  <img src="assets/language/claude-rtl-comparison.png" alt="The same Claude reply without and with Claude RTL — tables, lists and Hebrew text rendered left-to-right (broken) versus correctly right-to-left" width="92%">
+</p>
+
+<p align="center">
+  <sub><b>Without</b> RTL the same reply renders left-to-right — reversed table columns, punctuation on the wrong side. <b>With</b> it, every block reads correctly.</sub>
+</p>
+
 ## Why it's different
 
 - 🎯 **Per-block direction, done right.** Each paragraph, list, table and quote decides its *own* direction from its *own* content. English blocks stay LTR and Hebrew blocks flip RTL — **in the same document**, with no global flip (the bug every other tool has).
 - 🔒 **Zero network. Zero telemetry. Zero stored data.** Your conversations never leave your machine. Copy and Ctrl-F stay **byte-for-byte** — we never inject invisible Unicode marks.
 - 🛡️ **Safe by construction.** Your original Claude is **never modified**. We patch a separate copy, and it **survives Claude updates automatically**.
-- 🖥️ **Desktop *and* browser, one engine.** A one-click macOS menu-bar app for Claude Desktop, and a userscript for claude.ai in any browser — sharing the exact same bidi engine.
+- 🖥️ **Desktop *and* browser, one engine.** A one-click menu-bar app on macOS and a tray app on Windows for Claude Desktop, plus a userscript for claude.ai in any browser — all sharing the exact same bidi engine.
 - 🧪 **A pure, unit-tested core.** The bidi intelligence (`engine/`) is DOM-free and covered by a torture-test corpus, decoupled from how it's delivered.
 
 ## What it handles
@@ -48,7 +57,23 @@ Claude writes beautiful Hebrew and Arabic — then renders it **left-to-right**:
 | Input / edit boxes | `dir="auto"`, instantly, with no flicker |
 | Mixed English/Hebrew doc | Each block self-determines — no global flip |
 
+## ✅ Supported platforms
+
+| Surface | Requirements |
+|---|---|
+| 🍎 **macOS Desktop** | macOS 13 (Ventura) or later. The prebuilt `.dmg` is for Apple Silicon; Intel Macs can build from source. |
+| 🪟 **Windows Desktop** | Windows 10 or 11 (64-bit). Patches **both** Claude installs — the classic installer from claude.ai *and* the Microsoft Store (MSIX) build. |
+| 🌐 **Browser — claude.ai** | Any OS. Chrome, Edge, Firefox or Safari with a userscript manager. |
+
 ## 🚀 Install
+
+<p align="center">
+  <img src="assets/language/claude-rtl-showcase.png" alt="The Claude RTL manager — menu-bar app on macOS and tray app on Windows, both showing “RTL is active”" width="80%">
+</p>
+
+<p align="center">
+  <sub>The one-click manager on <b>macOS</b> (menu bar) and <b>Windows</b> (tray) — installs, auto-updates and removes RTL, no terminal needed.</sub>
+</p>
 
 ### macOS Desktop — the easy way (recommended)
 
@@ -76,6 +101,20 @@ Then, from the menu-bar app:
 Toggle **“Keep RTL after Claude updates”** and it re-applies itself whenever Claude updates. **Check for updates** (under *Details*) fetches newer builds of the app itself.
 
 > The original Claude in `/Applications` is never touched. “Open Claude-RTL” quits the original first (they can't run together). A blank first window? Quit (⌘Q) and reopen.
+
+### Windows Desktop
+
+A tray app installs, updates, and removes RTL — **no Node, no terminal, nothing to install first** (a portable runtime is bundled in the installer).
+
+1. Download **`ClaudeRTL-Setup.exe`** from the [latest release](https://github.com/liorshaya/claude-desktop-rtl/releases/latest) and run it. It's a **per-user** install — no admin needed.
+2. Launch **Claude RTL** from the Start menu and click the button to patch Claude. The app detects how Claude is installed and applies RTL in place, backing up the originals first.
+3. Open Claude — Hebrew, Arabic and Persian render RTL.
+
+Toggle **“Keep RTL after Claude updates”** and it re-applies itself automatically after every Claude update.
+
+> Works with **both** Claude installs: the classic `.exe` from claude.ai *and* the Microsoft Store (MSIX) build. On the Store build, applying RTL needs a one-time **admin approval** (UAC) — it re-signs Claude with a local certificate so Cowork keeps working, and **“Restore original” fully reverts everything**. Your original Claude is always backed up.
+
+Prefer the command line? The PowerShell pipeline is documented in **[desktop/windows/README.md](desktop/windows/README.md)**.
 
 ### Browser — claude.ai (any OS)
 
@@ -114,9 +153,8 @@ Full design: **[ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 
 ## 🗺️ Roadmap
 
-- ✅ Engine · browser · macOS desktop · auto-update watcher · trust/signing · self-contained GUI · app icon · `.dmg` · in-app update check
-- ⏳ **Windows** (same engine; a Windows patch pipeline + GUI) — see [CONTRIBUTING.md](CONTRIBUTING.md)
-- ⏳ Onboarding window · styled `.dmg` · screenshot gallery
+- ✅ **Engine** · **browser** userscript · **macOS desktop** (menu-bar app, auto-update watcher, signing, `.dmg`) · **Windows desktop** (tray app + installer, patches both the classic and Microsoft Store installs, update watcher)
+- ⏳ Onboarding polish · styled `.dmg` · screenshot gallery
 
 ## 🤝 Contributing
 

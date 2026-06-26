@@ -6,9 +6,8 @@
 > and from the same engine to **claude.ai in the browser**.
 >
 > **This version is the plan for building everything from scratch — engine included —
-> and pushing edge-case handling further than any existing tool** (`shraga100`,
-> `soguy`, `toboly`, or the browser extensions). We don't adopt their engine; we
-> learn from it and beat it on the hard cases.
+> and pushing edge-case handling further than any existing tool.** We build our own
+> engine and aim to win on the hard cases.
 
 Status: **design → v0.1 build**. Audience: the builder (you).
 
@@ -52,9 +51,8 @@ scratch is reasonable, lets you own every decision, and is where we earn the wor
 ### Non-goals (v1)
 - Reimplementing UAX #9 (see §0).
 - Full UI **mirroring** (sidebar/buttons/icon flip). We do *content* direction. The
-  one exception we DO take from `shraga100`: force the Chromium **window-chrome**
-  direction to LTR so the native peek/preview window and title-bar controls don't
-  jump on RTL OS locales (§9).
+  one exception: force the Chromium **window-chrome** direction to LTR so the native
+  peek/preview window and title-bar controls don't jump on RTL OS locales (§9).
 - Monetization. Windows/Linux. Vertical (top-to-bottom) scripts (CJK).
 - Injecting LRM/RLM/embedding control characters into Claude's text.
 
@@ -140,7 +138,7 @@ majority(text):     more RTL strong chars → 'rtl'; more LTR → 'ltr'; else nu
 paragraph opens with a brand/number/technical term. `stripLeadingNoise` fixes the
 *common* opener cases; `majority` is the safety net for the rest. **The fallback is
 always `null` (= leave inherited/default), never a forced `'rtl'`.** This is the
-single biggest correctness fix over `soguy`/`toboly`.
+single biggest correctness fix over naive first-strong-only tools.
 
 **How the decision is applied — the rule that kills the "English-doc-forced-RTL" bug
 (see §8.K):** for **prose blocks we do NOT write a `dir` attribute from JS at all.**
@@ -318,7 +316,7 @@ Copy model — never touch the original:
    original, strip the three team-id-coupled keys (`com.apple.application-identifier`,
    `com.apple.developer.team-identifier`, `keychain-access-groups`), then
    `codesign --force --deep --sign - --entitlements ent.plist`. Preserving
-   `com.apple.security.virtualization` keeps **Cowork** working (the `toboly` bug).
+   `com.apple.security.virtualization` keeps **Cowork** working (a known re-sign pitfall).
 
 CLI: `--install --uninstall --status --watch --unwatch --font NAME`.
 Document the one-time keychain re-auth + possible blank first window (quit & reopen).
@@ -480,7 +478,7 @@ broke RTL" regression class.
 ## 11. Trust: signed payload + preflights
 
 The `curl … | bash` install pattern is dangerous (runs whatever `main` says at run
-time). Mitigate like `shraga100` does, adapted to macOS:
+time). Mitigate it on macOS as follows:
 - **Sign the payload + `patch.sh`** with an offline key; ship a detached signature and
   a SHA-256. `verify.sh` checks both before anything runs. Prefer `minisign`/`signify`
   (simple, offline) and/or a **notarized packaged installer**. Pin the public key in
@@ -577,8 +575,8 @@ in the desktop pipeline.
    app loads that artifact in a CROSS-ORIGIN `a.claude.ai` iframe our renderer payload
    can't enter; full desktop-artifact coverage needs a main-process session preload
    (investigate post-v1 — risk of black-screen). Chat + rendered content are covered.
-6. Naming, and whether to share the corpus/engine improvements with the community
-   (`shraga100`/`soguy`) even while building your own.
+6. Naming, and whether to share the corpus/engine improvements with the wider
+   community even while building your own.
 
 ---
 
@@ -590,7 +588,4 @@ in the desktop pipeline.
   #29811 (update regression).
 - Electron `autoUpdater` / **Squirrel.Mac** + `ShipIt` bundle swap; `@electron/fuses`
   (`EnableEmbeddedAsarIntegrityValidation`).
-- Prior art studied (not adopted): `shraga100/claude-desktop-rtl-patch` (engine ideas:
-  currency-aware math, table detection, astral Unicode, signed releases, window-chrome
-  fix), `soguy/claude-desktop-rtl-mac` (macOS copy pipeline), `toboly/…`.
 - `man 5 launchd.plist` — `WatchPaths`, `ThrottleInterval`.
