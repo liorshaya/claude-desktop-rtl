@@ -1,0 +1,122 @@
+using System.Drawing;
+using System.Drawing.Imaging;
+using System.Runtime.InteropServices;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Threading;
+using H.NotifyIcon;
+
+namespace ClaudeRtl;
+
+public partial class App : Application
+{
+    private PatchService _svc = null!;
+    private TaskbarIcon _tray = null!;
+    private PopupWindow? _popup;
+    private Color _lastColor = Color.Empty;
+
+    [DllImport("user32.dll")] private static extern bool DestroyIcon(IntPtr handle);
+
+    protected override void OnStartup(StartupEventArgs e)
+    {
+        base.OnStartup(e);
+        _svc = new PatchService();
+
+        _tray = new TaskbarIcon { ToolTipText = "Claude RTL" };
+        SetIcon(Color.Gray);
+
+        var menu = new ContextMenu();
+        var miOpen = new MenuItem { Header = "Open" };
+        miOpen.Click += (_, _) => ShowPopup();
+        var miQuit = new MenuItem { Header = "Quit" };
+        miQuit.Click += (_, _) => Shutdown();
+        menu.Items.Add(miOpen);
+        menu.Items.Add(new Separator());
+        menu.Items.Add(miQuit);
+        _tray.ContextMenu = menu;
+        _tray.TrayLeftMouseUp += (_, _) => ShowPopup();
+        _tray.ForceCreate();
+
+        _ = RefreshIconAsync();
+
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(60) };
+        timer.Tick += async (_, _) => await RefreshIconAsync();
+        timer.Start();
+    }
+
+    private void ShowPopup()
+    {
+        _popup ??= new PopupWindow(_svc);
+        _ = _popup.ShowNearTrayAsync();
+        _ = RefreshIconAsync();
+    }
+
+    private async Task RefreshIconAsync()
+    {
+        var st = await _svc.RefreshAsync();
+        var color = st.Kind == InstallKind.None ? Color.Gray
+                  : st.FullyPatched              ? Color.FromArgb(0x2F, 0xA8, 0x4F)
+                                                 : Color.FromArgb(0xE1, 0x92, 0x0E);
+        Dispatcher.Invoke(() =>
+        {
+            SetIcon(color);
+            _tray.ToolTipText = "Claude RTL — " +
+                (st.Kind == InstallKind.None ? "no Claude install"
+                 : st.FullyPatched ? "active" : "needs apply");
+        });
+    }
+
+    // Only rebuild the tray icon when the state colour actually changes (avoids HICON churn).
+    private void SetIcon(Color c)
+    {
+        if (c == _lastColor) return;
+        _lastColor = c;
+        var old = _tray.Icon;
+        _tray.Icon = MakeIcon(c);
+        old?.Dispose();
+    }
+
+    private static Bitmap? _glyph;
+    private static Bitmap Glyph()
+    {
+        if (_glyph != null) return _glyph;
+        using var s = GetResourceStream(new Uri("pack://application:,,,/Assets/glyph.png"))!.Stream;
+        _glyph = new Bitmap(s);
+        return _glyph;
+    }
+
+    // The brand glyph (starburst + arrow) tinted to the state colour, rendered to a 32x32 tray icon.
+    private static Icon MakeIcon(Color c)
+    {
+        using var bmp = new Bitmap(32, 32);
+        using (var g = Graphics.FromImage(bmp))
+        {
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+            g.Clear(Color.Transparent);
+            // Recolour: map every pixel's RGB to c, keep its alpha (the glyph shape).
+            var m = new ColorMatrix(new[]
+            {
+                new float[] { 0, 0, 0, 0, 0 },
+                new float[] { 0, 0, 0, 0, 0 },
+                new float[] { 0, 0, 0, 0, 0 },
+                new float[] { 0, 0, 0, 1, 0 },
+                new float[] { c.R / 255f, c.G / 255f, c.B / 255f, 0, 1 },
+            });
+            using var ia = new ImageAttributes();
+            ia.SetColorMatrix(m);
+            var src = Glyph();
+            g.DrawImage(src, new Rectangle(0, 0, 32, 32), 0, 0, src.Width, src.Height, GraphicsUnit.Pixel, ia);
+        }
+        IntPtr h = bmp.GetHicon();
+        var icon = (Icon)Icon.FromHandle(h).Clone();
+        DestroyIcon(h);
+        return icon;
+    }
+
+    protected override void OnExit(ExitEventArgs e)
+    {
+        _tray?.Dispose();
+        base.OnExit(e);
+    }
+}
