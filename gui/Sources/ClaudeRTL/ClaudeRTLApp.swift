@@ -267,8 +267,8 @@ struct ContentView: View {
                 case .upToDate:
                     Label("Up to date", systemImage: "checkmark.circle.fill").font(.caption2).foregroundStyle(.green)
                 case .available(let v):
-                    Button { NSWorkspace.shared.open(runner.repoURL) } label: {
-                        Label("v\(v) available", systemImage: "arrow.down.circle.fill")
+                    Button { Task { await runner.installUpdate() } } label: {
+                        Label("Download v\(v)", systemImage: "arrow.down.circle.fill")
                     }.foregroundStyle(.orange)
                 case .failed(let why):
                     Button("Retry — \(why)") { Task { await runner.checkForUpdates() } }.foregroundStyle(.secondary)
@@ -276,9 +276,9 @@ struct ContentView: View {
             }
             .controlSize(.small).buttonStyle(.borderless)
             if case .available = runner.updateCheck {
-                Text("git pull && cd gui && ./build.sh")
-                    .font(.system(.caption2, design: .monospaced)).foregroundStyle(.secondary)
-                    .textSelection(.enabled)
+                Text("Downloads the new .dmg, then opens it — drag Claude RTL to Applications.")
+                    .font(.caption2).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }

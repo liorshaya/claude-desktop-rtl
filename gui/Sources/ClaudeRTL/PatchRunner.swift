@@ -1,5 +1,6 @@
 import Foundation
 import ServiceManagement
+import AppKit
 
 // One source of truth = the bash scripts. This wraps them via Process and parses status.
 // (Step 2 will swap the Node dependency for a bundled standalone asar/fuses binary so the
@@ -32,10 +33,11 @@ final class PatchRunner: ObservableObject {
     // This manager's own version (baked into Info.plist from the repo's VERSION file).
     let managerVersion = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "dev"
     let repoURL = URL(string: "https://github.com/liorshaya/claude-desktop-rtl")!
-    // The SOLE network call in the whole project, and only in the manager (never the engine /
-    // injected payload, which stay strictly zero-network). User-initiated, GET-only, sends
-    // nothing: just reads the repo's VERSION file to tell you a newer build exists.
-    private let versionURL = URL(string: "https://raw.githubusercontent.com/liorshaya/claude-desktop-rtl/main/VERSION")!
+    // Network only in the manager (never the engine / injected payload, which stay strictly
+    // zero-network), and only on an explicit click: read the latest GitHub Release to learn the
+    // newest version + its .dmg, then (if you choose) download that .dmg.
+    private let releasesAPI = URL(string: "https://api.github.com/repos/liorshaya/claude-desktop-rtl/releases/latest")!
+    private var pendingDmgURL: URL?
 
     // The shipped .app carries the whole node-free pipeline in Resources; fall back to the
     // dev repo when running via `swift run`.
@@ -154,22 +156,49 @@ final class PatchRunner: ObservableObject {
         }
     }
 
-    // Fetch the repo's VERSION and compare to ours. One GET, on explicit click only.
+    // Read the latest GitHub Release (tag + .dmg asset) and compare to ours. One GET, on click only.
     func checkForUpdates() async {
         updateCheck = .checking
-        var req = URLRequest(url: versionURL)
+        var req = URLRequest(url: releasesAPI)
         req.cachePolicy = .reloadIgnoringLocalCacheData
-        req.timeoutInterval = 10
+        req.timeoutInterval = 12
+        req.setValue("claude-rtl", forHTTPHeaderField: "User-Agent")
         do {
             let (data, resp) = try await URLSession.shared.data(for: req)
             guard let http = resp as? HTTPURLResponse, http.statusCode == 200,
-                  let raw = String(data: data, encoding: .utf8) else {
+                  let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let tag = json["tag_name"] as? String else {
                 updateCheck = .failed("couldn't reach GitHub"); return
             }
-            let latest = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            let latest = tag.trimmingCharacters(in: CharacterSet(charactersIn: "vV "))
+            pendingDmgURL = nil
+            if let assets = json["assets"] as? [[String: Any]] {
+                for a in assets where (a["name"] as? String)?.hasSuffix(".dmg") == true {
+                    if let urlStr = a["browser_download_url"] as? String { pendingDmgURL = URL(string: urlStr) }
+                    break
+                }
+            }
             updateCheck = Self.isNewer(latest, than: managerVersion) ? .available(latest) : .upToDate
         } catch {
             updateCheck = .failed("offline?")
+        }
+    }
+
+    // Download the release .dmg and open it (Finder shows the drag-to-Applications window). No
+    // terminal, and no auto-replacing a running bundle — safest for an ad-hoc-signed app.
+    func installUpdate() async {
+        guard let url = pendingDmgURL else { NSWorkspace.shared.open(repoURL); return }
+        busy = true
+        defer { busy = false }
+        do {
+            let (tmpFile, _) = try await URLSession.shared.download(from: url)
+            let dest = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("Claude-RTL-update.dmg")
+            try? FileManager.default.removeItem(at: dest)
+            try FileManager.default.moveItem(at: tmpFile, to: dest)
+            NSWorkspace.shared.open(dest)
+        } catch {
+            log += "update download failed: \(error.localizedDescription)\n"
+            NSWorkspace.shared.open(repoURL)
         }
     }
 
