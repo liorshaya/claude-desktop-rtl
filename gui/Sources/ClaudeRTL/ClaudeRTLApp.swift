@@ -72,24 +72,22 @@ struct ContentView: View {
         VStack(spacing: 0) {
             header
             Divider()
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    stateBadge
-                    controls
-                    if s.originalRunning { warning }
-                    primaryButton
-                    secondaryRow
-                    if runner.busy { workingRow }
-                    details
-                }
-                .padding(16)
+            VStack(alignment: .leading, spacing: 14) {
+                stateBadge
+                controls
+                if s.originalRunning { warning }
+                primaryButton
+                secondaryRow
+                if runner.busy { workingRow }
+                details
             }
+            .padding(16)
         }
-        // Fixed size: a MenuBarExtra .window resizes unreliably (it grows when Details opens but
-        // doesn't shrink back, leaving a transparent gap). Keep the window constant and let the
-        // content scroll inside instead. The fixed height gives the ScrollView a real height so it
-        // doesn't collapse (unlike a maxHeight in a self-sizing window).
-        .frame(width: 326, height: 470)
+        .frame(width: 326)
+        // Size the window to the content's exact height so it grows when Details opens AND shrinks
+        // back when it closes (without this a MenuBarExtra .window keeps the larger frame on
+        // collapse, leaving the content un-anchored with a transparent gap at the top).
+        .fixedSize(horizontal: false, vertical: true)
         .animation(.easeInOut(duration: 0.22), value: s.patchedInstalled)
         .animation(.easeInOut(duration: 0.22), value: needsUpdate)
         .animation(.easeInOut(duration: 0.22), value: s.originalRunning)
