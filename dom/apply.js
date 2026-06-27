@@ -225,27 +225,34 @@ function splitArrows(node) {
 // AND keeps the operands left-to-right. (Per-symbol isolation was measured insufficient: it
 // fixes the glyph but the operands still swap — "3 < 5" → "5 < 3".) A lone relation between two
 // non-operands stays a single char. The code point is untouched (copy/Ctrl-F intact, §3.6).
-// Rendered KaTeX/MathJax/code are already LTR-isolated, so we skip them (inLtrIsland); brackets
-// are excluded by the engine. Stamped per block; only RTL blocks are walked.
-const RELATIONS_ATTR = 'data-rtl-relations';
-function wrapRelationsInBlock(block) {
-  if (block.getAttribute(RELATIONS_ATTR) === '1') return;
-  block.setAttribute(RELATIONS_ATTR, '1');
-  if (!hasMirroredMathRel(block.textContent || '')) return;
-  if (resolvedDir(proseText(block)) !== 'rtl') return; // only where the block renders RTL
-  const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT, {
+//
+// Unlike arrows, this is NEITHER gated on the block's direction NOR limited to prose leaves:
+// isolating a comparison LTR is correct in BOTH directions (a no-op in an LTR block, the fix in
+// an RTL one), so we walk the whole message root. That catches an expression in a container
+// `plaintext` never reached — a bare equation in a `<div>` with no `<p>` would otherwise render
+// "x ≤ 4 > 0" (the reported standalone-equation bug). Rendered KaTeX/MathJax/code are already
+// LTR-isolated (inLtrIsland); the composer and source/code views are skipped so we never mutate
+// the input; brackets are excluded by the engine. Idempotent: a relation already inside a
+// data-rtl-relation span is left alone, so re-walks during streaming are safe.
+function wrapRelationsUnder(root) {
+  if (!root || root.nodeType !== 1) return;
+  if (!hasMirroredMathRel(root.textContent || '')) return;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
     acceptNode: (n) => {
       if (!n.nodeValue || !hasMirroredMathRel(n.nodeValue)) return NodeFilter.FILTER_REJECT;
       const p = n.parentNode;
       if (p && p.hasAttribute && p.hasAttribute('data-rtl-relation')) return NodeFilter.FILTER_REJECT;
       if (inLtrIsland(n)) return NodeFilter.FILTER_REJECT; // rendered math/code already LTR
+      if (p && p.closest && p.closest('pre, code, [contenteditable="true"], .ProseMirror')) {
+        return NodeFilter.FILTER_REJECT; // never touch source views or the input box
+      }
       return NodeFilter.FILTER_ACCEPT;
     },
   });
   const targets = [];
   let n;
   while ((n = walker.nextNode())) targets.push(n);
-  for (let i = 0; i < targets.length; i++) splitRelations(targets[i]);
+  for (let i = 0; i < targets.length && i < MAX_NODES_PER_PASS; i++) splitRelations(targets[i]);
 }
 
 function splitRelations(node) {
@@ -416,10 +423,14 @@ function processRoot(root) {
   for (let i = 0; i < proseBlocks.length && i < MAX_NODES_PER_PASS; i++) processProseDir(proseBlocks[i]);
   const codeBlocks = findCodeBlocks(root);
   for (let i = 0; i < codeBlocks.length && i < MAX_NODES_PER_PASS; i++) processCodeBlock(codeBlocks[i]);
+  // Relations isolate the whole comparison EXPRESSION and are direction-independent, so they
+  // run over the ENTIRE root (not just prose leaves) — this is what reaches a standalone
+  // equation living in a non-`<p>` container. Arrows (flip only in RTL) and signed numbers stay
+  // per-leaf, gated on the leaf rendering RTL.
+  wrapRelationsUnder(root);
   const leaves = findLeafBlocks(root);
   for (let i = 0; i < leaves.length && i < MAX_NODES_PER_PASS; i++) {
     wrapArrowsInBlock(leaves[i]);
-    wrapRelationsInBlock(leaves[i]);
     wrapSignedNumbersInBlock(leaves[i]);
   }
   if (ENABLE_ISLANDS) wrapBareIslands(root); // eslint-disable-line no-use-before-define

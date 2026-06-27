@@ -143,6 +143,17 @@ test('relationRuns: offsets are correct UTF-16 ranges, astral-safe', () => {
   assert.deepEqual(runs(t), ['3 < 5']);
 });
 
+test('relationRuns: English (LTR) comparisons are detected the same — isolation is a no-op there', () => {
+  // In an LTR block these already read correctly; the engine still returns the run (the DOM
+  // isolates it LTR, which changes nothing visually) — so English stays correct, never flipped.
+  assert.deepEqual(runs('if 3 < 5 then'), ['3 < 5']);
+  assert.deepEqual(runs('for i in 0 ≤ i < n loop'), ['0 ≤ i < n']);
+  assert.deepEqual(runs('x > 0 and y ≤ 10'), ['x > 0', 'y ≤ 10']); // "and" breaks the chain → two
+  assert.deepEqual(runs('the set ℝ ⊃ ℚ holds'), ['ℝ ⊃ ℚ']);
+  assert.deepEqual(runs('assert a ≠ b'), ['a ≠ b']);
+  assert.deepEqual(runs('no math here at all'), []);
+});
+
 test('relationRuns: realistic Hebrew prose lines', () => {
   assert.deepEqual(runs('סוגר זוויתי: השתמש ב-<div> כאן.'), []);          // tag only → nothing
   assert.deepEqual(runs('ברור ש-3 < 5, וגם 7 > 2.'), ['3 < 5', '7 > 2']); // two comparisons
