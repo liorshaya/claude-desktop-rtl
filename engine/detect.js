@@ -104,21 +104,39 @@ function majorityOfDirs(dirs) {
   return null;
 }
 
-// Table column direction (§3.2): the HEADER row defines the table's orientation (per-cell
-// `plaintext` already right-aligns Hebrew cells; only the column ORDER is in question, and
-// that follows the header). header[0] is the semantic-key column's label, so it decides:
-// Hebrew → rtl, English → ltr. If it is neutral (e.g. a number), the header-row majority;
-// only a table with no header signal at all falls back to the first-column data.
-function tableDir(headers, firstColumn) {
+// Table column-order direction (§3.2) — ONE of the two independent table layers. This
+// decides only the COLUMN FLOW order (first column on the right vs left), written as `dir`
+// on the <table>. It follows the MAJORITY content direction across EVERY cell: a
+// majority-Hebrew table reads RTL even when its key/header column is English (the case the
+// screenshots catch). A tie (or all-neutral) is broken by the header row; still tied →
+// null (leave LTR, write no dir). The other layer — each cell's INTERNAL bidi order and
+// its column's alignment edge — is owned by `unicode-bidi: plaintext` + `columnDirs`, not
+// here. (Was header[0]-decides; changed to majority-of-content per the table redesign.)
+function tableDir(allCells, headers) {
+  allCells = allCells || [];
   headers = headers || [];
-  firstColumn = firstColumn || [];
-  const h0 = cellDir(headers[0] || '');
-  if (h0) return h0;
-  const headerMaj = majorityOfDirs(headers.map(cellDir));
-  if (headerMaj) return headerMaj;
-  return majorityOfDirs(firstColumn.map(cellDir));
+  const maj = majorityOfDirs(allCells.map(cellDir));
+  if (maj) return maj;
+  return majorityOfDirs(headers.map(cellDir));
+}
+
+// Per-column alignment direction (§3.2) — the SECOND table layer. Majority `cellDir` down
+// each column, so a column hugs the edge of its own language (Hebrew → 'rtl'/right,
+// English/number → 'ltr'/left) for clean columns, independent of the table's column order.
+// `rows` is an array of rows, each an array of cell texts (ragged rows are fine). Returns
+// an array indexed by column: 'rtl' | 'ltr' | null (neutral column → leave to default).
+function columnDirs(rows) {
+  rows = rows || [];
+  const cols = [];
+  for (const row of rows) {
+    for (let c = 0; c < row.length; c++) {
+      if (!cols[c]) cols[c] = [];
+      cols[c].push(cellDir(row[c] || ''));
+    }
+  }
+  return cols.map((dirs) => majorityOfDirs(dirs));
 }
 
 // __EXPORTS__ (everything below is stripped when inlined into the browser payload)
-const api = { firstStrong, majority, stripLeadingNoise, detectBlockDir, cellDir, tableDir };
+const api = { firstStrong, majority, stripLeadingNoise, detectBlockDir, cellDir, tableDir, columnDirs };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;

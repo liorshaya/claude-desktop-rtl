@@ -157,13 +157,27 @@ exists to *drive table/island/streaming-settle decisions*, not to stamp every pa
 - **Table cell** (`cellDir`): a cell is RTL if it *contains any* RTL char (header
   labels like "ID"/"blob" often start Latin yet belong to a Hebrew column). Neutral
   cells (digits/punct only) → `null`.
-- **Table column** (`tableDir`): the **header row defines the table's orientation** —
-  per-cell `plaintext` already right-aligns Hebrew cells, so only the column *order* is
-  in question, and that follows the header. `header[0]` (the semantic-key column's label)
-  decides: Hebrew → RTL, English → LTR. If `header[0]` is neutral (a number), the
-  header-row majority; only a table with no header signal at all falls back to the
-  first-column data. *(An English-headed table stays LTR even with Hebrew data — the
-  cells still align right individually.)*
+- **Tables — two independent layers** (the bidi-table consensus: column *order* and cell
+  *direction* are separate decisions, never conflated; W3C/MDN/Apple/Wikipedia all agree).
+  - **Layer 1 — column ORDER** (`tableDir`, written as `dir` on the `<table>`): follows the
+    **majority content direction across every cell**. A majority-Hebrew table reads RTL
+    (first column on the **right**) *even when its key/header column is English* — the case
+    the screenshots catch. A tie or all-neutral table is broken by the header row; still
+    tied → `null` (stay LTR, write no `dir`). *(Changed from the old `header[0]`-decides
+    policy, which wrongly kept a mostly-Hebrew table LTR because its key column was English.)*
+  - **Layer 2a — per-cell INTERNAL order**: every `<td>/<th>` self-determines its base
+    direction from its **own** content via `unicode-bidi: plaintext` (CSS, §4) — so numbers,
+    currency, and mixed runs (`natural או washed`) order correctly and are never forced to
+    the table's direction. This is the same per-leaf-block mechanism as prose (§8.K).
+  - **Layer 2b — per-column ALIGNMENT** (`columnDirs`): each column hugs the edge of its
+    **majority** content language — Hebrew columns right, English/number columns left — for
+    **clean columns** regardless of column order. The DOM stamps each cell `data-rtl-col`
+    and CSS keys `text-align` off it (§5). This is *alignment only*; it sets no `dir`/
+    `direction` on a cell (Layer 2a owns ordering), so the §3.2/§8.K "JS never forces prose
+    direction" rule holds — the one `dir` JS writes on a table is still the Layer-1 `<table>`
+    flip. *(Alternative considered: per-cell natural alignment — rejected because a mixed
+    cell inside a column would zig-zag; per-column keeps columns clean. r12a's homogeneity
+    allowance.)*
 
 ### 3.3 Streaming-settle (anti-flicker) — *beyond existing tools*
 During streaming a paragraph may start `"In React…"` (first-strong LTR) and end up
@@ -291,7 +305,7 @@ Thin. Responsibilities only where CSS can't decide:
 | Code blocks / inline code | `pre`/`.code-block__code`/`code` | force LTR + isolate |
 | **Math** | KaTeX/MathJax/MathML | currency-guard + isolate LTR |
 | Lists (nested) | `ul/ol/li` | per-`li` dir; flip padding side; nesting |
-| Tables | `table/td/th` | semantic-key + majority (§3.2) |
+| Tables | `table/td/th` | majority column-order + per-column align + per-cell plaintext (§3.2) |
 | Blockquotes / headings | `blockquote/h1..h6` | leaf-block rules |
 | **Artifacts preview** | sandboxed `<iframe>`, strict CSP | inject into iframe doc; honor CSP (§12) |
 | **Cowork** outputs | rendered docs/results | same engine — a key differentiator |

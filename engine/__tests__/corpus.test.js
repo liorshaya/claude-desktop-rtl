@@ -8,7 +8,7 @@ const BIDI_CONTROLS = /[‎‏‪-‮⁦-⁩]/;
 
 test('index exposes the full §3 surface', () => {
   for (const fn of ['detectBlockDir', 'firstStrong', 'majority', 'cellDir', 'tableDir',
-    'segmentMath', 'digitScript', 'leadingNumber', 'hasRTL', 'isStrongRTL']) {
+    'columnDirs', 'segmentMath', 'digitScript', 'leadingNumber', 'hasRTL', 'isStrongRTL']) {
     assert.equal(typeof engine[fn], 'function', fn);
   }
 });
@@ -62,8 +62,10 @@ test('combining marks do not break detection (niqqud, harakat, tatweel)', () => 
   assert.equal(engine.detectBlockDir('بـــحث'), 'rtl'); // tatweel U+0640
 });
 
-test('table: Hebrew row-labels + English column headers', () => {
-  assert.equal(engine.tableDir(['שם', 'ID', 'Email'], ['דני', 'רותי']), 'rtl');
+test('table: majority-Hebrew table reads RTL even with English headers (§3.2)', () => {
+  assert.equal(engine.tableDir(
+    ['שם', 'ID', 'Email', 'דני', 'דנה', 'רותי'],
+    ['שם', 'ID', 'Email']), 'rtl');
 });
 
 test('fidelity: engine never emits a bidi control char', () => {

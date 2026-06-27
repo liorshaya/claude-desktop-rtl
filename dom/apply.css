@@ -90,15 +90,27 @@ pre[data-rtl-text] code {
 [dir="ltr"] { direction: ltr; }
 table[dir="rtl"] { direction: rtl; }
 
-/* Table cells align to the TABLE's direction, NOT per-cell — so every column lines up
- * cleanly with the header on the same edge (§3.2). `isolate` (vs the per-block `plaintext`
- * above) makes text-align:start follow the cell's inherited direction = the table's: all
- * cells right in an RTL table, all left in an LTR one. Content still orders correctly
- * within each cell. This rule comes after the leaf-block rule, so it wins for td/th. */
+/* Tables, two independent layers (§3.2):
+ * LAYER 1 — column ORDER: `dir="rtl"` on the <table> (set by JS from majority content)
+ *   flips column flow; the [dir="rtl"] rule above carries it.
+ * LAYER 2a — per-cell INTERNAL order: every cell self-determines its own base direction
+ *   from its own content via `plaintext` (numbers, currency, and mixed runs like
+ *   "natural או washed" order correctly without being forced to the table's direction).
+ * LAYER 2b — per-COLUMN alignment: JS stamps each cell with its column's majority
+ *   direction (data-rtl-col); the column hugs that edge — Hebrew columns right,
+ *   English/number columns left — for CLEAN columns regardless of column order. */
 :where(.prose, .standard-markdown, .font-claude-response, .font-claude-message, [data-testid="user-message"], [data-rtl-artifact])
   :is(td, th) {
-  unicode-bidi: isolate !important;
-  text-align: start !important;
+  unicode-bidi: plaintext !important;
+  text-align: start !important; /* provisional until JS stamps the per-column edge */
+}
+:where(.prose, .standard-markdown, .font-claude-response, .font-claude-message, [data-testid="user-message"], [data-rtl-artifact])
+  :is(td, th)[data-rtl-col="rtl"] {
+  text-align: right !important;
+}
+:where(.prose, .standard-markdown, .font-claude-response, .font-claude-message, [data-testid="user-message"], [data-rtl-artifact])
+  :is(td, th)[data-rtl-col="ltr"] {
+  text-align: left !important;
 }
 
 /* Claude draws the blockquote bar with a PHYSICAL border-left (Tailwind border-l-4) +

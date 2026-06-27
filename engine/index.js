@@ -29,6 +29,7 @@ const api = {
   detectBlockDir: detect.detectBlockDir,
   cellDir: detect.cellDir,
   tableDir: detect.tableDir,
+  columnDirs: detect.columnDirs,
   // §3.5 math vs currency
   segmentMath: math.segmentMath,
   // §8.F arrow mirroring

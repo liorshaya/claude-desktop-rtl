@@ -61,20 +61,14 @@ function findDirBlocks(root) {
   return qsa(SELECTORS.dirBlock, root);
 }
 
-// Read a <table>'s header cells and the first data column as plain text — the input
-// to engine.tableDir (§3.2). Returns { headers, firstColumn }.
+// Read a <table> as plain text for the engine (§3.2): the header row (the column-order
+// tie-break) and EVERY cell (drives the majority column-order decision in tableDir).
+// Returns { headers, allCells }.
 function readTableShape(table) {
   const headerCells = qsa('thead th, thead td, tr:first-child th, tr:first-child td', table);
   const headers = headerCells.map((c) => (c.textContent || '').trim());
-  const bodyRows = qsa('tbody tr', table);
-  const rows = bodyRows.length ? bodyRows : qsa('tr', table).slice(1);
-  const firstColumn = rows
-    .map((r) => {
-      const cell = r.querySelector('th, td');
-      return cell ? (cell.textContent || '').trim() : '';
-    })
-    .filter((t) => t.length > 0);
-  return { headers, firstColumn };
+  const allCells = qsa('th, td', table).map((c) => (c.textContent || '').trim());
+  return { headers, allCells };
 }
 
 // __EXPORTS__ (everything below is stripped when inlined into the browser payload)

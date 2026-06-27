@@ -2,7 +2,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const {
-  firstStrong, majority, stripLeadingNoise, detectBlockDir, cellDir, tableDir,
+  firstStrong, majority, stripLeadingNoise, detectBlockDir, cellDir, tableDir, columnDirs,
 } = require('../detect.js');
 
 test('firstStrong: first strong char wins, neutrals skipped', () => {
@@ -98,21 +98,36 @@ test('cellDir', () => {
   assert.equal(cellDir(''), null);
 });
 
-test('tableDir: the header row decides — header[0], then header majority, then data', () => {
-  // Hebrew key-column header => RTL table
-  assert.equal(tableDir(['שם', 'ID', 'Status'], ['דני', 'רותי']), 'rtl');
-  assert.equal(tableDir(['תיאור', 'סטטוס'], ['פעיל', 'סגור']), 'rtl');
-  // English headers => LTR table even when the DATA is Hebrew (cells still align right
-  // per-cell; only the column order follows the header). This is the header-based policy.
-  assert.equal(tableDir(['Name', 'Age', 'City'], ['ליאור', 'נהוראי', 'יקיר']), 'ltr');
-  assert.equal(tableDir(['Name', 'Age'], ['Alice', 'Bob']), 'ltr');
-  // header[0] is the semantic key: English key column wins over later Hebrew headers.
-  assert.equal(tableDir(['Type', 'שם', 'תיאור'], ['x']), 'ltr');
-  // header[0] neutral (a number) → fall back to header-row majority.
-  assert.equal(tableDir(['#', 'שם', 'תיאור'], ['1']), 'rtl');
-  // No header signal at all → fall back to the first-column data.
-  assert.equal(tableDir(['123', '456'], ['דני', 'רותי']), 'rtl');
-  assert.equal(tableDir(['123', '456'], ['789']), null);
+test('tableDir: majority of all cells decides column order; header breaks a tie (§3.2)', () => {
+  // Majority-Hebrew table with an English key/header column → RTL (first column on right).
+  // (Reverses the old header[0]-decides policy — this is the screenshot case.)
+  assert.equal(tableDir(
+    ['Stage', 'בעברית', 'מה קורה כאן', 'Harvesting', 'קטיף', 'איסוף הפירות'],
+    ['Stage', 'בעברית', 'מה קורה כאן']), 'rtl');
+  // Majority-English table with one Hebrew column → LTR.
+  assert.equal(tableDir(
+    ['Name', 'Age', 'City', 'Alice', '30', 'תל אביב', 'Bob', '25', 'חיפה'],
+    ['Name', 'Age', 'City']), 'ltr');
+  // Pure scripts.
+  assert.equal(tableDir(['שם', 'דני', 'רותי'], ['שם']), 'rtl');
+  assert.equal(tableDir(['Name', 'Alice', 'Bob'], ['Name']), 'ltr');
+  // All-neutral (numbers only) → null (no dir written; table stays LTR).
+  assert.equal(tableDir(['123', '456', '789'], ['123']), null);
+  // Tie on body cells → header-row majority breaks it.
+  assert.equal(tableDir(['שלום', 'hello'], ['שלום']), 'rtl');
+  assert.equal(tableDir([], []), null);
+});
+
+test('columnDirs: per-column majority for alignment (§3.2)', () => {
+  // Stage column → ltr; both Hebrew columns → rtl (incl. a mixed "natural או washed" cell).
+  assert.deepEqual(columnDirs([
+    ['Stage', 'בעברית', 'מה קורה כאן'],
+    ['Harvesting', 'קטיף', 'איסוף הפירות'],
+    ['Processing', 'עיבוד', 'natural או washed'],
+  ]), ['ltr', 'rtl', 'rtl']);
+  // Neutral (number) column → null; ragged rows are fine.
+  assert.deepEqual(columnDirs([['#', 'שם'], ['1', 'דני'], ['2']]), [null, 'rtl']);
+  assert.deepEqual(columnDirs([]), []);
 });
 
 test('fidelity: stripLeadingNoise injects no bidi controls (output is a tail of input)', () => {

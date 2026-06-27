@@ -95,14 +95,40 @@ function processAdded(node) {
   for (let i = 0; i < dirBlocks.length && i < MAX_NODES_PER_PASS; i++) processDirBlock(dirBlocks[i]);
 }
 
-// Flip a table's column order when the engine says the table is RTL (§3.2). This is the
-// only dir attribute JS writes on rendered content. Idempotent via DONE_ATTR.
+// Tables have TWO independent layers (§3.2). Layer 1: column-ORDER — flip the <table>'s
+// column flow when the engine says the majority content is RTL (the only `dir` JS writes
+// on rendered content). Layer 2: per-COLUMN alignment (alignColumns). Idempotent via
+// DONE_ATTR.
 function processTable(table) {
   if (table.getAttribute(DONE_ATTR)) return;
   if (table.closest('pre, code')) return; // a table inside a source/code view stays LTR
   const shape = readTableShape(table);
-  if (tableDir(shape.headers, shape.firstColumn) === 'rtl') table.setAttribute('dir', 'rtl');
+  if (tableDir(shape.allCells, shape.headers) === 'rtl') table.setAttribute('dir', 'rtl');
+  alignColumns(table);
   table.setAttribute(DONE_ATTR, '1');
+}
+
+// §3.2 layer 2 — per-column alignment for clean mixed-direction tables. Each column hugs
+// the edge of its MAJORITY content direction (Hebrew → right, English/number → left),
+// independent of the table's column-order dir. JS stamps `data-rtl-col`; the CSS keys
+// text-align off it. `unicode-bidi: plaintext` (CSS, on every cell) owns each cell's
+// INTERNAL bidi order, so no direction is forced on cell content — this only picks the
+// column's alignment edge. (colspans are ignored — markdown tables don't emit them.)
+function alignColumns(table) {
+  const rows = qsa('tr', table);
+  const cells = [];
+  const grid = [];
+  for (let r = 0; r < rows.length; r++) {
+    const rowCells = qsa('th, td', rows[r]);
+    cells[r] = rowCells;
+    grid[r] = rowCells.map((c) => (c.textContent || '').trim());
+  }
+  const dirs = columnDirs(grid);
+  for (let r = 0; r < cells.length; r++) {
+    for (let c = 0; c < cells[r].length; c++) {
+      if (dirs[c]) cells[r][c].setAttribute('data-rtl-col', dirs[c]);
+    }
+  }
 }
 
 // §8.D — a fenced block that is really RTL prose (Claude mis-used ``` for a Hebrew
