@@ -6,6 +6,22 @@
 // so copy/Ctrl-F still return the original glyph. PURE.
 
 const { segmentMath } = require('./math.js');
+const { isStrongLTR, isStrongRTL, isRTLDigit } = require('./ranges.js');
+
+// The direction of the nearest STRONG influence scanning `str` from `start` by `step` (±1):
+// 'L' (a strong-LTR letter), 'R' (a strong-RTL letter, OR a digit — UBA N1 says numbers act as
+// R for neutral resolution), or null at a boundary. Weak/neutral chars (spaces, punctuation,
+// signs) are skipped — they are exactly the run an arrow's direction is decided across.
+function neighborDir(str, start, step) {
+  for (let j = start; j >= 0 && j < str.length; j += step) {
+    const cp = str.codePointAt(j);
+    if (cp >= 0xdc00 && cp <= 0xdfff) continue; // low-surrogate half → its astral cp is at j-1
+    if (isStrongLTR(cp)) return 'L';
+    if (isStrongRTL(cp)) return 'R';
+    if ((cp >= 0x30 && cp <= 0x39) || isRTLDigit(cp)) return 'R'; // numbers act as R (N1)
+  }
+  return null;
+}
 
 // Arrow blocks. Flipping a vertical arrow (↑↓) horizontally is a no-op, and a diagonal
 // (↗) flips to its correct RTL counterpart (↖), so spanning whole blocks is safe.
@@ -36,9 +52,15 @@ function hasMirrorArrow(str) {
 // Which arrows in `text` are PROSE arrows that should be visually flipped in an RTL block —
 // returns their UTF-16 offsets. Arrows that fall inside a math run ($…$ / \(…\) / \[…\] /
 // $$…$$, per segmentMath) are LTR math semantics ("a → b" reads left-to-right even in
-// Hebrew) and are EXCLUDED. Currency `$…$` is not math, so arrows next to prices still
-// flip. The DOM layer additionally skips arrows inside *rendered* KaTeX/MathJax/MathML or
-// code islands (those text nodes never reach here). PURE; offsets index the input string.
+// Hebrew) and are EXCLUDED. Currency `$…$` is not math, so arrows next to prices still flip.
+//
+// CRUCIAL per-arrow rule: an arrow only flips when its LOCAL context is RTL, NOT because the
+// block's MAJORITY is. An arrow whose nearest strong neighbour on BOTH sides is LTR sits inside
+// an LTR run ("…input → output…" embedded in a Hebrew sentence): by bidi N1 it resolves LTR and
+// already points at its target on the right, so it must NOT flip. Hebrew-flanked, number-flanked
+// (N1: numbers act as R), mixed, and boundary arrows do flip with the RTL block. The DOM layer
+// additionally skips arrows inside *rendered* KaTeX/MathJax/MathML or code islands (those text
+// nodes never reach here). PURE; offsets index the input string.
 function arrowFlipOffsets(text) {
   const out = [];
   if (!text) return out;
@@ -50,7 +72,12 @@ function arrowFlipOffsets(text) {
     for (let i = 0; i < v.length; ) {
       const cp = v.codePointAt(i);
       const w = cp > 0xffff ? 2 : 1;
-      if (isMirrorArrow(cp)) out.push(seg.start + i);
+      if (isMirrorArrow(cp)) {
+        // skip an arrow embedded in an LTR run (both nearest strong neighbours are LTR)
+        if (!(neighborDir(v, i - 1, -1) === 'L' && neighborDir(v, i + w, 1) === 'L')) {
+          out.push(seg.start + i);
+        }
+      }
       i += w;
     }
   }

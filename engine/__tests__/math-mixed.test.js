@@ -30,13 +30,13 @@ test('mixed/HE: units — temperature, price, percent', () => {
   assert.deepEqual(runs('עלייה של 5% < 10% השנה'), ['5% < 10%']);
   assert.deepEqual(runs('הסכום 1,000 ≤ x ≤ 1,000,000 שקל'), ['1,000 ≤ x ≤ 1,000,000']);
 });
-test('mixed/HE: arrows — prose flips, math run does not (engine view)', () => {
-  assert.deepEqual(flipped('הקלט a → הפלט b'), ['→']);
+test('mixed/HE: arrows — Hebrew-flanked flip, math run does not (engine view)', () => {
+  assert.deepEqual(flipped('הקלט a → הפלט b'), ['→']);              // mixed-flanked (a → ה) flips
   assert.deepEqual(flipped('הנוסחה $a \\to b$ כאן'), []);          // LaTeX → no glyph / no flip
-  assert.deepEqual(flipped('צעד 1 ➜ צעד 2 ➜ סיום'), ['➜', '➜']);
-  // one line with BOTH a comparison and a prose arrow — each engine handles its own
-  assert.deepEqual(runs('אם a < b אז a → b'), ['a < b']);
-  assert.deepEqual(flipped('אם a < b אז a → b'), ['→']);
+  assert.deepEqual(flipped('צעד 1 ➜ צעד 2 ➜ סיום'), ['➜', '➜']);   // number/Hebrew-flanked
+  // one line with BOTH a comparison and a Hebrew-flanked prose arrow — each engine its own
+  assert.deepEqual(runs('אם a < b אז קלט → פלט'), ['a < b']);
+  assert.deepEqual(flipped('אם a < b אז קלט → פלט'), ['→']);
 });
 test('mixed/HE: signed numbers — prefixes excluded, real signs caught', () => {
   assert.deepEqual(signed('הטמפרטורה -5 עד +5 מעלות'), ['-5', '+5']);
@@ -58,11 +58,13 @@ test('mixed/EN: sets, currency, percent, grouping', () => {
   assert.deepEqual(runs('growth 2% < 3% < 5% yearly'), ['2% < 3% < 5%']);
   assert.deepEqual(runs('between 1,000 and 9,999: 1,000 ≤ n ≤ 9,999'), ['1,000 ≤ n ≤ 9,999']);
 });
-test('mixed/EN: arrows — prose vs math', () => {
-  assert.deepEqual(flipped('the map f: X → Y here'), ['→']);           // prose (DOM flips only in RTL)
-  assert.deepEqual(flipped('the limit $x \\to 0$ holds'), []);          // math → never
-  assert.deepEqual(flipped('step one ➜ step two ➜ done'), ['➜', '➜']);
-  assert.deepEqual(flipped('A ⟶ B \\(C → D\\) E ⟶ F'), ['⟶', '⟶']);    // middle is math
+test('mixed/EN: arrows never flip — Latin-flanked stay right, math excluded', () => {
+  // In English every prose arrow is Latin-flanked, so it already points at the target and never
+  // flips; math-run arrows are excluded too — so nothing flips in an English line.
+  assert.deepEqual(flipped('the map f: X → Y here'), []);
+  assert.deepEqual(flipped('the limit $x \\to 0$ holds'), []);
+  assert.deepEqual(flipped('step one ➜ step two ➜ done'), []);
+  assert.deepEqual(flipped('A ⟶ B \\(C → D\\) E ⟶ F'), []);
 });
 test('mixed/EN: signed numbers', () => {
   assert.deepEqual(signed('the range is -40 to +50 degrees'), ['-40', '+50']);

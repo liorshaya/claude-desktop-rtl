@@ -20,10 +20,10 @@ test('hasMirrorArrow', () => {
   assert.equal(hasMirrorArrow(''), false);
 });
 
-test('arrowFlipOffsets: prose arrows flip', () => {
-  // Bare prose arrow → its UTF-16 offset is returned (the DOM wraps+flips only these).
-  assert.deepEqual(arrowFlipOffsets('a → b'), [2]);
-  assert.deepEqual(arrowFlipOffsets('תה ירוק → 75°C'), [8]);
+test('arrowFlipOffsets: a Hebrew-flanked prose arrow flips', () => {
+  // A Hebrew-flanked arrow → its UTF-16 offset is returned (the DOM wraps+flips only these).
+  assert.deepEqual(arrowFlipOffsets('א → ב'), [2]);
+  assert.deepEqual(arrowFlipOffsets('תה ירוק → 75°C'), [8]); // Hebrew before, number after
   assert.deepEqual(arrowFlipOffsets('no arrows'), []);
   assert.deepEqual(arrowFlipOffsets(''), []);
 });
@@ -55,14 +55,23 @@ test('isMirrorArrow: simple / double / long / mapsto / harpoon / dingbat / heavy
   }
 });
 
-test('arrowFlipOffsets: many prose arrow TYPES flip — Hebrew & English', () => {
-  assert.deepEqual(flipped('a → b → c'), ['→', '→']);
+test('arrowFlipOffsets: many arrow TYPES flip when Hebrew/number-flanked', () => {
+  assert.deepEqual(flipped('א → ב → ג'), ['→', '→']);
   assert.deepEqual(flipped('א ← ב ← ג'), ['←', '←']);
-  assert.deepEqual(flipped('input ⇒ output'), ['⇒']);
-  assert.deepEqual(flipped('x ↦ y'), ['↦']);
+  assert.deepEqual(flipped('קלט ⇒ פלט'), ['⇒']);
+  assert.deepEqual(flipped('א ↦ ב'), ['↦']);
   assert.deepEqual(flipped('שלב 1 ➜ שלב 2 ➔ סוף'), ['➜', '➔']);
-  assert.deepEqual(flipped('p ⟹ q ⟸ r'), ['⟹', '⟸']);
-  assert.deepEqual(flipped('A ⇄ B'), ['⇄']);
+  assert.deepEqual(flipped('פסוק ⟹ ש ⟸ פסוק'), ['⟹', '⟸']);
+  assert.deepEqual(flipped('א ⇄ ב'), ['⇄']);
+});
+
+test('arrowFlipOffsets: the SAME arrow types do NOT flip when Latin-flanked', () => {
+  // a Latin-flanked arrow already points at its target — it must stay as written, in any block.
+  assert.deepEqual(flipped('a → b → c'), []);
+  assert.deepEqual(flipped('input ⇒ output'), []);
+  assert.deepEqual(flipped('x ↦ y'), []);
+  assert.deepEqual(flipped('p ⟹ q ⟸ r'), []);
+  assert.deepEqual(flipped('A ⇄ B'), []);
 });
 
 test('arrowFlipOffsets: vertical/diagonal arrows are in range (flip is no-op or correct)', () => {
@@ -79,18 +88,22 @@ test('arrowFlipOffsets: math-delimited arrows never flip — every delimiter', (
   assert.deepEqual(arrowFlipOffsets('the map \\(X → Y\\) is'), []); // math run inside English
 });
 
-test('arrowFlipOffsets: a single $…$ with NO LaTeX signal is text → its arrow flips', () => {
-  assert.deepEqual(flipped('$f: A → B$'), ['→']);   // no \, ^, _, {} → not math
-  assert.deepEqual(flipped('$5 → $10'), ['→']);      // currency
+test('arrowFlipOffsets: a single $…$ with NO LaTeX signal is text (currency), not math', () => {
+  // Not math → the arrow obeys local context like any prose arrow. "$5 → $10" being non-empty
+  // proves it is NOT treated as a math run (a math run would yield []); "$f: A → B$" is
+  // Latin-flanked so it stays put.
+  assert.deepEqual(flipped('$5 → $10'), ['→']);   // number-flanked → flips
+  assert.deepEqual(flipped('$f: A → B$'), []);     // Latin-flanked → stays put
+  assert.deepEqual(flipped('מחיר $5 → $10 בלבד'), ['→']);
 });
 
-test('arrowFlipOffsets: prose arrows flip and the math arrow is skipped, one mixed line', () => {
+test('arrowFlipOffsets: Hebrew-flanked prose arrows flip and the math arrow is skipped', () => {
   assert.deepEqual(flipped('א → ב $x^2 → y$ ג → ד'), ['→', '→']); // middle arrow is in math
-  assert.deepEqual(flipped('a → b \\(c → d\\) e → f'), ['→', '→']);
+  assert.deepEqual(flipped('א → ב \\(c → d\\) ג → ד'), ['→', '→']); // middle in \(…\) math
 });
 
 test('arrowFlipOffsets: exact offsets, astral-safe', () => {
-  assert.deepEqual(arrowFlipOffsets('a → b'), [2]);
-  const t = '😀 a → b'; // an astral emoji shifts the index by 2 UTF-16 units
+  assert.deepEqual(arrowFlipOffsets('א → ב'), [2]);
+  const t = '😀 א → ב'; // an astral emoji shifts the index by 2 UTF-16 units
   assert.deepEqual(arrowFlipOffsets(t), [t.indexOf('→')]);
 });

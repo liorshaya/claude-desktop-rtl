@@ -1,86 +1,83 @@
 'use strict';
-// engine/__tests__/arrow-direction.test.js — does a prose arrow point the way Claude MEANT it?
-// Claude writes "→" for "leads to / maps to" in READING order. In English (LTR) that already
-// points at the target on the right, so it must NOT flip. In Hebrew (RTL) the target is on the
-// LEFT, so the glyph must flip (CSS scaleX(-1)) to point left. The DOM decides per block:
+// engine/__tests__/arrow-direction.test.js — an arrow's flip is decided by its LOCAL context
+// (its nearest strong neighbours), NOT by the block's majority language. An arrow flanked by
+// Latin already points at its target on the right and must NEVER flip — even inside a Hebrew
+// sentence ("…input → output ואז…"): the English phrase is read left-to-right as its own run.
+// A Hebrew-flanked arrow flips toward the (leftward) target; numbers count as RTL (UBA N1); a
+// math-delimited arrow never flips. The DOM rule is modelled here as
 //   resolvedDir(block) === 'rtl'  ?  flip(arrowFlipOffsets)  :  keep
-// modelled here over the two pure engine functions, with MANY lines per language. A DOM
-// screenshot/transform check confirms the real glyphs (EN: no flip; HE: matrix(-1,…)).
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { resolvedDir, arrowFlipOffsets } = require('../index.js');
 
-// the arrow glyphs that ACTUALLY flip in the rendered block (empty when the block is LTR)
+// the arrow glyphs that ACTUALLY flip in the rendered block
 const flipsIn = (t) => (resolvedDir(t) === 'rtl' ? arrowFlipOffsets(t).map((i) => t[i]) : []);
 
-// ───────────── English (LTR): arrows keep pointing right, exactly as written ─────────────
-test('EN: a single arrow never flips — it already points at the target', () => {
-  assert.deepEqual(flipsIn('A → B'), []);
-  assert.deepEqual(flipsIn('input → output'), []);
-  assert.deepEqual(flipsIn('cause → effect'), []);
-  assert.deepEqual(flipsIn('the map f → g sends'), []);
-  assert.deepEqual(flipsIn('x ↦ y'), []);
-  assert.deepEqual(flipsIn('north ↑ up'), []);
-});
-test('EN: arrow chains and double/long/dingbat arrows never flip', () => {
-  assert.deepEqual(flipsIn('start → middle → end'), []);
-  assert.deepEqual(flipsIn('A ⇒ B ⇒ C'), []);
-  assert.deepEqual(flipsIn('process: A ⟶ B ⟶ C'), []);
-  assert.deepEqual(flipsIn('step ➜ step ➜ done'), []);
-  assert.deepEqual(flipsIn('if p then p → q'), []);
-  assert.deepEqual(flipsIn('reduces 5 → 4 → 3 → 0'), []);
-});
-test('EN: back-arrows and bidirectional arrows stay exactly as written', () => {
-  assert.deepEqual(flipsIn('B ← A'), []);
-  assert.deepEqual(flipsIn('a ↔ b'), []);
-  assert.deepEqual(flipsIn('left ⇐ right'), []);
-  assert.deepEqual(flipsIn('x ⇄ y'), []);
+// ══════ THE HEADLINE CASE: an English→English arrow that continues into Hebrew ══════
+test('EN→EN arrow then Hebrew text: the arrow keeps pointing RIGHT (must not flip)', () => {
+  assert.deepEqual(flipsIn('input → output ואז התהליך נמשך'), []);
+  assert.deepEqual(flipsIn('the value A → B ואז ממשיכים בעברית'), []);
+  assert.deepEqual(flipsIn('map x → y ולאחר מכן נחזיר'), []);
+  assert.deepEqual(flipsIn('start → end והכל עובד כמו שצריך'), []);
+  assert.deepEqual(flipsIn('הקלט a → output הוא הפלט'), []);   // arrow between a and output (both Latin)
 });
 
-// ───────────── Hebrew (RTL): arrows flip to point at the target (leftward) ─────────────
-test('HE: a single prose arrow flips', () => {
+// ══════ Latin-flanked arrows never flip — in either language ══════
+test('Latin-flanked arrows keep the English direction (no flip)', () => {
+  assert.deepEqual(flipsIn('A → B'), []);
+  assert.deepEqual(flipsIn('input → output'), []);
+  assert.deepEqual(flipsIn('start → middle → end'), []);
+  assert.deepEqual(flipsIn('cause ⇒ effect'), []);
+  assert.deepEqual(flipsIn('x ↦ y'), []);
+  assert.deepEqual(flipsIn('the map f: X → Y here'), []);
+  assert.deepEqual(flipsIn('הפונקציה f → g מעתיקה'), []);     // Latin-flanked, inside Hebrew
+  assert.deepEqual(flipsIn('המיפוי x ↦ y כאן'), []);
+});
+
+// ══════ Hebrew-flanked arrows flip toward the (leftward) target ══════
+test('Hebrew-flanked arrows flip', () => {
   assert.deepEqual(flipsIn('א → ב'), ['→']);
   assert.deepEqual(flipsIn('הקלט → הפלט'), ['→']);
   assert.deepEqual(flipsIn('סיבה → תוצאה'), ['→']);
-  assert.deepEqual(flipsIn('הפונקציה f → g מעתיקה'), ['→']);
-  assert.deepEqual(flipsIn('מעלה ↑ למעלה'), ['↑']);
-});
-test('HE: arrow chains and double/long/dingbat arrows flip', () => {
   assert.deepEqual(flipsIn('שלב א → שלב ב → סוף'), ['→', '→']);
-  assert.deepEqual(flipsIn('תהליך: א ⇒ ב ⇒ ג'), ['⇒', '⇒']);
+  assert.deepEqual(flipsIn('הזרימה קלט → פלט מהירה'), ['→']);
   assert.deepEqual(flipsIn('ראשון ⟶ שני ⟶ שלישי'), ['⟶', '⟶']);
   assert.deepEqual(flipsIn('צעד ➜ צעד ➜ סיום'), ['➜', '➜']);
-  assert.deepEqual(flipsIn('קלט → עיבוד → פלט → תוצאה'), ['→', '→', '→']);
-});
-test('HE: a back-arrow / bidirectional written in Hebrew flips too', () => {
-  assert.deepEqual(flipsIn('ב ← א'), ['←']);
   assert.deepEqual(flipsIn('פלט ⇐ קלט'), ['⇐']);
-  assert.deepEqual(flipsIn('א ↔ ב'), ['↔']); // symmetric: flip is a visual no-op but consistent
 });
 
-// ───────────── mixed lines: the MAJORITY language of the block decides ─────────────
-test('mixed: majority Hebrew flips the arrow; majority English keeps it', () => {
-  assert.deepEqual(flipsIn('הקלט input → output הפלט'), ['→']);  // Hebrew majority → flip
-  assert.deepEqual(flipsIn('input → output (קלט)'), []);          // English majority → keep
-  assert.deepEqual(flipsIn('הצעד a → b הבא'), ['→']);            // Hebrew majority → flip
-  assert.deepEqual(flipsIn('compute a → b now'), []);            // English majority → keep
-  assert.deepEqual(flipsIn('הפונקציה map: x → y מחזירה'), ['→']);
+// ══════ number-flanked arrows flip in an RTL block (UBA N1: numbers act as R) ══════
+test('number-flanked arrows flip inside an RTL block', () => {
+  assert.deepEqual(flipsIn('מ-5 → 10 מעלות חום'), ['→']);
+  assert.deepEqual(flipsIn('ירידה 100 → 50 אחוז'), ['→']);
+  assert.deepEqual(flipsIn('המחיר $5 → $10 עלה'), ['→']);
 });
 
-// ───────────── math arrows never flip, in EITHER language ─────────────
-test('math-run arrows never flip regardless of the surrounding language', () => {
-  assert.deepEqual(flipsIn('הנוסחה \\(a → b\\) כאן'), []);   // Hebrew block, \(…\) math
-  assert.deepEqual(flipsIn('the rule \\(a → b\\) holds'), []); // English block, \(…\) math
-  assert.deepEqual(flipsIn('$x^2 → y$ הוא הביטוי'), []);      // Hebrew block, $…$ math (^ signal)
-  assert.deepEqual(flipsIn('המעבר $a \\to b$ מהיר'), []);     // \to → no glyph at all
-  assert.deepEqual(flipsIn('הגבול \\[x → ∞\\] קיים'), []);     // \[…\] display math
+// ══════ mixed-flanked arrows (a Hebrew side) flip with the RTL block ══════
+test('mixed-flanked arrows (one Hebrew side) flip in an RTL block', () => {
+  assert.deepEqual(flipsIn('הקלט a → הפלט b'), ['→']);            // a(L) → ה(R)
+  assert.deepEqual(flipsIn('input → הפלט הסופי כאן הוא'), ['→']); // t(L) → ה(R)
 });
 
-// ───────────── no arrows / empty → never a flip ─────────────
-test('lines without a prose arrow never flip', () => {
+// ══════ majority-English line: nothing flips (LTR block) ══════
+test('a majority-English line never flips (LTR block)', () => {
+  assert.deepEqual(flipsIn('input → output (קלט)'), []);
+  assert.deepEqual(flipsIn('compute a → b now'), []);
+  assert.deepEqual(flipsIn('A ⇒ B ⇒ C'), []);
+});
+
+// ══════ math-run arrows never flip, in either language ══════
+test('math-run arrows never flip, in either language', () => {
+  assert.deepEqual(flipsIn('הנוסחה \\(a → b\\) כאן'), []);
+  assert.deepEqual(flipsIn('the rule \\(a → b\\) holds'), []);
+  assert.deepEqual(flipsIn('$x^2 → y$ הוא הביטוי'), []);
+  assert.deepEqual(flipsIn('המעבר $a \\to b$ מהיר'), []);
+});
+
+// ══════ no arrow / empty → never a flip ══════
+test('lines without a flipping arrow', () => {
   assert.deepEqual(flipsIn('שלום עולם'), []);
   assert.deepEqual(flipsIn('hello world'), []);
-  assert.deepEqual(flipsIn('3 < 5 ≤ 7'), []);
   assert.deepEqual(flipsIn('הערך 3 < 5 קטן'), []);
   assert.deepEqual(flipsIn(''), []);
 });
