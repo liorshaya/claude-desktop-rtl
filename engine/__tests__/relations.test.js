@@ -86,6 +86,20 @@ test('relationRuns: set / order relations grow over their operands (incl. ℕ �
   assert.deepEqual(runs('π ≥ 3'), ['π ≥ 3']);               // Greek operand
 });
 
+test('relationRuns: exotic Bidi_Mirrored relations also isolate over their operands', () => {
+  assert.deepEqual(runs('a ≮ b'), ['a ≮ b']);              // not less-than
+  assert.deepEqual(runs('x ≰ y'), ['x ≰ y']);              // neither less nor equal
+  assert.deepEqual(runs('A ⊄ B'), ['A ⊄ B']);              // not a subset
+  assert.deepEqual(runs('A ⊆ B ⊊ C'), ['A ⊆ B ⊊ C']);      // subset / proper-subset chain
+  assert.deepEqual(runs('p ⊑ q'), ['p ⊑ q']);              // square image of/under
+  assert.deepEqual(runs('m ≪ n'), ['m ≪ n']);              // much-less-than
+  assert.deepEqual(runs('x ≲ y ≳ z'), ['x ≲ y ≳ z']);      // lesssim / gtrsim chain
+  assert.deepEqual(runs('f ∝ g'), ['f ∝ g']);              // proportional-to
+  assert.deepEqual(runs('Γ ⊢ φ'), ['Γ ⊢ φ']);              // turnstile, Greek operands
+  assert.deepEqual(runs('a ⊲ b ⊴ c'), ['a ⊲ b ⊴ c']);      // normal subgroup
+  assert.deepEqual(runs('הקבוצה A ⊄ B נפרדת'), ['A ⊄ B']);  // Hebrew context
+});
+
 test('relationRuns: a decimal point stays in the number, a sentence period does NOT', () => {
   assert.deepEqual(runs('3.14 < π'), ['3.14 < π']);       // internal decimal kept
   assert.deepEqual(runs('0.5 ≤ x ≤ 1.5'), ['0.5 ≤ x ≤ 1.5']);

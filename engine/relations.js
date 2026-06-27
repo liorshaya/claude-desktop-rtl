@@ -57,6 +57,8 @@ function isTermChar(ch) {
   if (c >= 0x06f0 && c <= 0x06f9) return true;             // Persian digits
   if (c >= 0x0370 && c <= 0x03ff) return true;             // Greek (π, θ, Σ, …)
   if (c >= 0x2100 && c <= 0x214f) return true;             // Letterlike (ℕ ℤ ℝ ℚ ℂ …)
+  if (c === 0xb2 || c === 0xb3 || c === 0xb9) return true; // ² ³ ¹ (Latin-1 superscripts)
+  if (c >= 0x2070 && c <= 0x209f) return true;             // super/subscripts (x² aₙ x⁻¹ 2³ …)
   return false; // NB: '.' is handled by the scanners as a decimal only BETWEEN term chars,
                 // so a sentence-final period ("7 > 2.") is not swallowed into the operand.
 }
