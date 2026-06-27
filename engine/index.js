@@ -40,10 +40,11 @@ const api = {
   isMirrorArrow: arrows.isMirrorArrow,
   hasMirrorArrow: arrows.hasMirrorArrow,
   arrowFlipOffsets: arrows.arrowFlipOffsets,
-  // §8.F math-relation mirroring (UBA mirrors these; we isolate them LTR)
+  // §8.F math-relation mirroring (UBA mirrors these AND reorders operands; we isolate the
+  // whole comparison expression LTR so glyphs stay upright and operands keep reading order)
   isMirroredMathRel: relations.isMirroredMathRel,
   hasMirroredMathRel: relations.hasMirroredMathRel,
-  relationOffsets: relations.relationOffsets,
+  relationRuns: relations.relationRuns,
   // §8.D code-fence-vs-prose
   looksLikeCode: code.looksLikeCode,
   codeBlockIsProse: code.codeBlockIsProse,

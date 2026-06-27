@@ -1,11 +1,11 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { isMirroredMathRel, hasMirroredMathRel, relationOffsets } = require('../relations.js');
+const { isMirroredMathRel, hasMirroredMathRel, relationRuns } = require('../relations.js');
 
 const cp = (s) => s.codePointAt(0);
-// the actual characters relationOffsets says to isolate (readable view of the offsets)
-const isolated = (t) => relationOffsets(t).map((i) => t[i]);
+// the substrings relationRuns says to isolate (readable view of the [start,end) ranges)
+const runs = (t) => relationRuns(t).map(([s, e]) => t.slice(s, e));
 
 test('isMirroredMathRel: true for Bidi_Mirrored math relations (UBA mirrors these in RTL)', () => {
   // comparison + set/order relations — all General_Category Sm AND Bidi_Mirrored=Yes
@@ -45,68 +45,107 @@ test('hasMirroredMathRel', () => {
   assert.equal(hasMirroredMathRel(''), false);
 });
 
-// ── relationOffsets: which < > ≤ … to isolate, EXCLUDING HTML-tag brackets ──────────────
+// ── relationRuns: isolate the WHOLE comparison expression (operators + operands + chains) ──
+// Per-symbol isolation was measured insufficient: it un-mirrors the glyph but RTL still swaps
+// the operands ("3 < 5" → "5 < 3"). Isolating the maximal `TERM (REL TERM)+` run keeps the
+// whole comparison at one even embedding level, so it reads left-to-right correctly.
 
-test('relationOffsets: comparison < and > ARE isolated', () => {
-  assert.deepEqual(relationOffsets('3 < 5'), [2]);
-  assert.deepEqual(isolated('3 < 5'), ['<']);
-  assert.deepEqual(isolated('7 > 2'), ['>']);
-  assert.deepEqual(isolated('x < y > z'), ['<', '>']); // spaces → both are comparisons
-  assert.deepEqual(isolated('a < b'), ['<']);
+test('relationRuns: a single comparison grows to its two operands', () => {
+  assert.deepEqual(relationRuns('3 < 5'), [[0, 5]]);
+  assert.deepEqual(runs('3 < 5'), ['3 < 5']);
+  assert.deepEqual(runs('7 > 2'), ['7 > 2']);
+  assert.deepEqual(runs('a < b'), ['a < b']);
+  assert.deepEqual(runs('x<y'), ['x<y']);           // no spaces
+  assert.deepEqual(runs('3 ≤ 5'), ['3 ≤ 5']);
 });
 
-test('relationOffsets: HTML-tag < > are NOT isolated (left to UBA)', () => {
-  assert.deepEqual(relationOffsets('<div>'), []);
-  assert.deepEqual(relationOffsets('</div>'), []);
-  assert.deepEqual(relationOffsets('<br/>'), []);
-  assert.deepEqual(relationOffsets('<a href="x">'), []);
-  assert.deepEqual(relationOffsets('השתמש ב-<div> כאן'), []);
-  assert.deepEqual(relationOffsets('<p>טקסט</p>'), []); // open + close tag → all brackets left
+test('relationRuns: the headline case — a chained / mixed-operator inequality is ONE run', () => {
+  assert.deepEqual(runs('0 < x ≤ 4'), ['0 < x ≤ 4']);       // the ticket's exact expression
+  assert.deepEqual(runs('a < b < c'), ['a < b < c']);
+  assert.deepEqual(runs('1 ≤ n ≤ 100'), ['1 ≤ n ≤ 100']);
+  assert.deepEqual(runs('x < y > z'), ['x < y > z']);       // two seeds merge into one chain
+  assert.deepEqual(runs('0 ≤ x = y'), ['0 ≤ x = y']);       // `=` chains (not a seed on its own)
+  // inside a Hebrew sentence: only the expression is wrapped, the prose is untouched
+  assert.deepEqual(runs('התחום 0 < x ≤ 4 נכון'), ['0 < x ≤ 4']);
 });
 
-test('relationOffsets: tag detection needs an immediate letter/slash + a closing >', () => {
-  // not a tag → still a comparison → isolate
-  assert.deepEqual(isolated('a<b'), ['<']);   // no closing >
-  assert.deepEqual(isolated('< 3'), ['<']);   // space after < (not a tag name)
-  assert.deepEqual(isolated('<3'), ['<']);    // digit after < (not a tag name)
-  assert.deepEqual(isolated('value <'), ['<']); // trailing <
+test('relationRuns: negative-number operands keep their sign inside the run', () => {
+  assert.deepEqual(runs('-5 < x'), ['-5 < x']);
+  assert.deepEqual(runs('x < -5'), ['x < -5']);
+  assert.deepEqual(runs('-5 < x < -1'), ['-5 < x < -1']);
+  assert.deepEqual(runs('−3 ≤ y'), ['−3 ≤ y']);              // U+2212 minus
+  // the Hebrew prefix look-alike: "-" after a letter is NOT pulled in as a sign
+  assert.deepEqual(runs('ש-3 < 5'), ['3 < 5']);
 });
 
-test('relationOffsets: mixed comparison + tag in one string', () => {
-  // "3 < 5 and <div>": the bare < is a comparison (isolate), the <div> brackets are a tag (leave)
-  assert.deepEqual(isolated('3 < 5 and <div>'), ['<']);
-  // generics-like List<int> is treated as a tag run (leave); the real comparison still isolates
-  assert.deepEqual(isolated('List<int> ו-3 < 5'), ['<']);
+test('relationRuns: set / order relations grow over their operands (incl. ℕ ℤ ℝ)', () => {
+  assert.deepEqual(runs('x ∈ S'), ['x ∈ S']);
+  assert.deepEqual(runs('A ⊂ B'), ['A ⊂ B']);
+  assert.deepEqual(runs('ℕ ⊂ ℤ'), ['ℕ ⊂ ℤ']);              // Letterlike operands
+  assert.deepEqual(runs('a ≠ b ≈ c'), ['a ≠ b ≈ c']);       // chained ≠ ≈
+  assert.deepEqual(runs('π ≥ 3'), ['π ≥ 3']);               // Greek operand
 });
 
-test('relationOffsets: unambiguous relations (≤ ≥ ∈ ⊂ …) always isolate, never tag-filtered', () => {
-  assert.deepEqual(isolated('3 ≤ 5'), ['≤']);
-  assert.deepEqual(isolated('x ∈ S'), ['∈']);
-  assert.deepEqual(isolated('A ⊂ B'), ['⊂']);
-  assert.deepEqual(isolated('a ≠ b ≈ c'), ['≠', '≈']);
-  // a tag next to a real relation: tag brackets dropped, the relation kept
-  assert.deepEqual(isolated('<div> ≤ כאן'), ['≤']);
-  assert.deepEqual(isolated('ש-2 ∈ <span>'), ['∈']);
+test('relationRuns: a decimal point stays in the number, a sentence period does NOT', () => {
+  assert.deepEqual(runs('3.14 < π'), ['3.14 < π']);       // internal decimal kept
+  assert.deepEqual(runs('0.5 ≤ x ≤ 1.5'), ['0.5 ≤ x ≤ 1.5']);
+  assert.deepEqual(runs('7 > 2.'), ['7 > 2']);             // trailing period NOT swallowed
+  assert.deepEqual(runs('x ≥ 0. ראה'), ['x ≥ 0']);         // period before Hebrew prose
 });
 
-test('relationOffsets: brackets/symmetric/arrows never isolated; empty/none → []', () => {
-  assert.deepEqual(relationOffsets('f(3) = 5'), []);   // () + = → none
-  assert.deepEqual(relationOffsets('[a] {b}'), []);     // brackets → none
-  assert.deepEqual(relationOffsets('a → b ↔ c'), []);   // arrows → none (handled elsewhere)
-  assert.deepEqual(relationOffsets('שלום עולם'), []);
-  assert.deepEqual(relationOffsets(''), []);
+test('relationRuns: HTML-tag < > are NOT isolated (left to UBA)', () => {
+  assert.deepEqual(relationRuns('<div>'), []);
+  assert.deepEqual(relationRuns('</div>'), []);
+  assert.deepEqual(relationRuns('<br/>'), []);
+  assert.deepEqual(relationRuns('<a href="x">'), []);
+  assert.deepEqual(relationRuns('השתמש ב-<div> כאן'), []);
+  assert.deepEqual(relationRuns('<p>טקסט</p>'), []); // open + close tag → all brackets left
 });
 
-test('relationOffsets: offsets are correct UTF-16 indices, astral-safe', () => {
-  // an emoji (astral, 2 code units) before the comparison shifts the index by 2
+test('relationRuns: tag detection needs an immediate letter/slash + a closing >', () => {
+  // not a tag → still a comparison → isolate (and grow to operands)
+  assert.deepEqual(runs('a<b'), ['a<b']);    // no closing >
+  assert.deepEqual(runs('< 3'), ['< 3']);    // space after < (not a tag name); no left operand
+  assert.deepEqual(runs('<3'), ['<3']);      // digit after < (not a tag name)
+  assert.deepEqual(runs('value <'), ['value <']); // trailing <, no right operand
+});
+
+test('relationRuns: a real comparison and an HTML tag coexisting in one string', () => {
+  assert.deepEqual(runs('3 < 5 and <div>'), ['3 < 5']);       // bare < grows; <div> dropped
+  assert.deepEqual(runs('List<int> ו-3 < 5'), ['3 < 5']);     // generics tag dropped
+  assert.deepEqual(runs('<div> ≤ כאן'), ['≤']);                // tag dropped; lone ≤ (no operands)
+  assert.deepEqual(runs('ש-2 ∈ <span>'), ['2 ∈']);            // operand left, tag right → run stops at tag
+  assert.deepEqual(runs('בקוד כתבנו <button> וגם ש-a < b.'), ['a < b']);
+});
+
+test('relationRuns: a lone relation between two non-operands stays a single char', () => {
+  assert.deepEqual(runs('הסימן < מציין קטן מ'), ['<']);   // Hebrew both sides → no operand to grow
+  assert.deepEqual(runs('כאן ∈ שייכות'), ['∈']);
+});
+
+test('relationRuns: plain words after the expression are NOT swallowed (needs a connector)', () => {
+  assert.deepEqual(runs('3 < 5 and more'), ['3 < 5']);  // "and"/"more" follow with no connector
+  assert.deepEqual(runs('x > 0 therefore'), ['x > 0']);
+});
+
+test('relationRuns: brackets / symmetric ops / arrows are never isolated; empty/none → []', () => {
+  assert.deepEqual(relationRuns('f(3) = 5'), []);   // () + = → no mirrored seed
+  assert.deepEqual(relationRuns('[a] {b}'), []);     // brackets → none
+  assert.deepEqual(relationRuns('a → b ↔ c'), []);   // arrows → none (handled elsewhere)
+  assert.deepEqual(relationRuns('שלום עולם'), []);
+  assert.deepEqual(relationRuns(''), []);
+});
+
+test('relationRuns: offsets are correct UTF-16 ranges, astral-safe', () => {
+  // an emoji (astral, 2 code units) before the comparison shifts the indices by 2
   const t = '😀 3 < 5';
-  assert.deepEqual(relationOffsets(t), [t.indexOf('<')]);
-  assert.deepEqual(isolated(t), ['<']);
+  assert.deepEqual(relationRuns(t), [[t.indexOf('3'), t.length]]);
+  assert.deepEqual(runs(t), ['3 < 5']);
 });
 
-test('relationOffsets: realistic Hebrew prose lines', () => {
-  assert.deepEqual(isolated('סוגר זוויתי: השתמש ב-<div> כאן.'), []);          // tag only → nothing isolated
-  assert.deepEqual(isolated('ברור ש-3 < 5, וגם 7 > 2.'), ['<', '>']);         // two comparisons
-  assert.deepEqual(isolated('הקבוצה ℕ ⊂ ℤ והאיבר x ∈ S.'), ['⊂', '∈']);       // set relations
-  assert.deepEqual(isolated('בקוד כתבנו <button> וגם בדקנו ש-a < b.'), ['<']); // tag dropped, comparison kept
+test('relationRuns: realistic Hebrew prose lines', () => {
+  assert.deepEqual(runs('סוגר זוויתי: השתמש ב-<div> כאן.'), []);          // tag only → nothing
+  assert.deepEqual(runs('ברור ש-3 < 5, וגם 7 > 2.'), ['3 < 5', '7 > 2']); // two comparisons
+  assert.deepEqual(runs('הקבוצה ℕ ⊂ ℤ והאיבר x ∈ S.'), ['ℕ ⊂ ℤ', 'x ∈ S']); // set relations
+  assert.deepEqual(runs('נתון ש-0 < x ≤ 4 לכל x.'), ['0 < x ≤ 4']);        // chained, in prose
 });

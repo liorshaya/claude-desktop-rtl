@@ -217,14 +217,16 @@ function splitArrows(node) {
   if (node.parentNode) node.parentNode.replaceChild(frag, node);
 }
 
-// §8.F — raw Unicode math RELATIONS (`< ≤ ∈ ⊂ …`, Bidi_Mirrored) are mirrored by the
-// browser itself in an RTL block (UAX#9 L4), so "3 < 5" reads "3 > 5" — false. Unlike
-// arrows we do NOT flip them; we wrap each in <span data-rtl-relation> which CSS isolates
-// as LTR, so the browser renders the UPRIGHT glyph and the operands keep reading order
-// (verified: symbol-only isolation reads correctly, whole-run isolation reads backwards).
-// The code point is untouched (copy/Ctrl-F intact, §3.6). Rendered KaTeX/MathJax/code are
-// already LTR-isolated, so we skip them (inLtrIsland); brackets are excluded by the engine
-// predicate (their RTL mirroring is correct). Stamped per block; only RTL blocks are walked.
+// §8.F — raw Unicode math RELATIONS (`< ≤ ∈ ⊂ …`, Bidi_Mirrored) are mirrored by the browser
+// in an RTL block (UAX#9 L4) AND its operands get reordered (N1/N2), so "0 < x ≤ 4" reads
+// "x ≤ 4 < 0" — the glyphs flip and the terms permute, changing the math. We wrap the whole
+// comparison EXPRESSION (engine relationRuns grows each relation over its operands and chains)
+// in <span data-rtl-relation>, which CSS isolates LTR — the browser then renders upright glyphs
+// AND keeps the operands left-to-right. (Per-symbol isolation was measured insufficient: it
+// fixes the glyph but the operands still swap — "3 < 5" → "5 < 3".) A lone relation between two
+// non-operands stays a single char. The code point is untouched (copy/Ctrl-F intact, §3.6).
+// Rendered KaTeX/MathJax/code are already LTR-isolated, so we skip them (inLtrIsland); brackets
+// are excluded by the engine. Stamped per block; only RTL blocks are walked.
 const RELATIONS_ATTR = 'data-rtl-relations';
 function wrapRelationsInBlock(block) {
   if (block.getAttribute(RELATIONS_ATTR) === '1') return;
@@ -248,29 +250,24 @@ function wrapRelationsInBlock(block) {
 
 function splitRelations(node) {
   const text = node.nodeValue;
-  // Only these offsets are isolated: every mirror-relation EXCEPT the < > of an HTML tag
-  // (those would read ">div<" if isolated; the engine leaves them to UBA).
-  const offsets = relationOffsets(text);
-  if (!offsets.length) return; // e.g. a node whose only "relations" are tag brackets
-  const set = new Set(offsets);
+  // Each run is a whole comparison expression to isolate LTR (operators + operands + chains),
+  // EXCLUDING the < > of an HTML tag (those would read ">div<" if isolated). A lone relation
+  // with no operands is a single-char run. Engine offsets are exact UTF-16 ranges.
+  const runs = relationRuns(text);
+  if (!runs.length) return; // e.g. a node whose only "relations" are tag brackets
   const frag = document.createDocumentFragment();
-  let buf = '';
-  for (let i = 0; i < text.length; ) {
-    const cp = text.codePointAt(i);
-    const w = cp > 0xffff ? 2 : 1;
-    const ch = text.slice(i, i + w);
-    if (set.has(i)) {
-      if (buf) { frag.appendChild(document.createTextNode(buf)); buf = ''; }
-      const span = document.createElement('span');
-      span.setAttribute('data-rtl-relation', '');
-      span.textContent = ch; // exact glyph preserved — CSS isolates LTR so it renders upright
-      frag.appendChild(span);
-    } else {
-      buf += ch;
-    }
-    i += w;
+  let pos = 0;
+  for (let r = 0; r < runs.length; r++) {
+    const s = runs[r][0];
+    const e = runs[r][1];
+    if (s > pos) frag.appendChild(document.createTextNode(text.slice(pos, s)));
+    const span = document.createElement('span');
+    span.setAttribute('data-rtl-relation', '');
+    span.textContent = text.slice(s, e); // exact chars preserved — CSS isolates the run LTR
+    frag.appendChild(span);
+    pos = e;
   }
-  if (buf) frag.appendChild(document.createTextNode(buf));
+  if (pos < text.length) frag.appendChild(document.createTextNode(text.slice(pos)));
   if (node.parentNode) node.parentNode.replaceChild(frag, node);
 }
 
@@ -291,6 +288,9 @@ function wrapSignedNumbersInBlock(block) {
       if (!n.nodeValue || !signedNumberRuns(n.nodeValue).length) return NodeFilter.FILTER_REJECT;
       const p = n.parentNode;
       if (p && p.hasAttribute && p.hasAttribute('data-rtl-num')) return NodeFilter.FILTER_REJECT;
+      // A signed operand of a comparison ("-5 < x") is already inside an LTR-isolated relation
+      // run — its sign renders correctly there; don't wrap it again.
+      if (p && p.closest && p.closest('[data-rtl-relation]')) return NodeFilter.FILTER_REJECT;
       if (inLtrIsland(n)) return NodeFilter.FILTER_REJECT; // rendered math/code already LTR
       return NodeFilter.FILTER_ACCEPT;
     },
