@@ -23,6 +23,7 @@ const api = {
   isDigit: numbers.isDigit,
   digitScript: numbers.digitScript,
   leadingNumber: numbers.leadingNumber,
+  signedNumberRuns: numbers.signedNumberRuns,
   // §3.2 detection
   firstStrong: detect.firstStrong,
   majority: detect.majority,

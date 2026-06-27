@@ -274,6 +274,53 @@ function splitRelations(node) {
   if (node.parentNode) node.parentNode.replaceChild(frag, node);
 }
 
+// §3.4/§8.F — a SIGNED number ("-5", "+3", "−5") in RTL has its leading sign detached by the
+// browser: "-5" renders "5-" (reads "5 minus", not "minus 5"). We wrap each signed-number run
+// in <span data-rtl-num>, which CSS isolates as an LTR unit so the sign stays with its number.
+// The engine's signedNumberRuns excludes the Hebrew prefix "ל-15" and the range "5-10" (the
+// `-` there follows a letter/digit, not a word boundary). Code point untouched (copy/Ctrl-F).
+// Skips rendered math/code islands; only RTL blocks are walked; stamped per block.
+const NUMS_ATTR = 'data-rtl-nums';
+function wrapSignedNumbersInBlock(block) {
+  if (block.getAttribute(NUMS_ATTR) === '1') return;
+  block.setAttribute(NUMS_ATTR, '1');
+  if (!signedNumberRuns(block.textContent || '').length) return;
+  if (resolvedDir(proseText(block)) !== 'rtl') return; // only where the block renders RTL
+  const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT, {
+    acceptNode: (n) => {
+      if (!n.nodeValue || !signedNumberRuns(n.nodeValue).length) return NodeFilter.FILTER_REJECT;
+      const p = n.parentNode;
+      if (p && p.hasAttribute && p.hasAttribute('data-rtl-num')) return NodeFilter.FILTER_REJECT;
+      if (inLtrIsland(n)) return NodeFilter.FILTER_REJECT; // rendered math/code already LTR
+      return NodeFilter.FILTER_ACCEPT;
+    },
+  });
+  const targets = [];
+  let n;
+  while ((n = walker.nextNode())) targets.push(n);
+  for (let i = 0; i < targets.length; i++) splitSignedNumbers(targets[i]);
+}
+
+function splitSignedNumbers(node) {
+  const text = node.nodeValue;
+  const runs = signedNumberRuns(text);
+  if (!runs.length) return;
+  const frag = document.createDocumentFragment();
+  let pos = 0;
+  for (let r = 0; r < runs.length; r++) {
+    const s = runs[r][0];
+    const e = runs[r][1];
+    if (s > pos) frag.appendChild(document.createTextNode(text.slice(pos, s)));
+    const span = document.createElement('span');
+    span.setAttribute('data-rtl-num', '');
+    span.textContent = text.slice(s, e); // exact chars; CSS isolates LTR so the sign stays put
+    frag.appendChild(span);
+    pos = e;
+  }
+  if (pos < text.length) frag.appendChild(document.createTextNode(text.slice(pos)));
+  if (node.parentNode) node.parentNode.replaceChild(frag, node);
+}
+
 // §6 — blocks whose DECORATION depends on direction (list marker/indent, blockquote bar)
 // ALWAYS get an explicit dir, placed on the side the content ACTUALLY renders to. That side
 // is `resolvedDir` (plaintext first-strong, or our override) — NOT `detectBlockDir`, which
@@ -373,6 +420,7 @@ function processRoot(root) {
   for (let i = 0; i < leaves.length && i < MAX_NODES_PER_PASS; i++) {
     wrapArrowsInBlock(leaves[i]);
     wrapRelationsInBlock(leaves[i]);
+    wrapSignedNumbersInBlock(leaves[i]);
   }
   if (ENABLE_ISLANDS) wrapBareIslands(root); // eslint-disable-line no-use-before-define
   sweepInputs(root);

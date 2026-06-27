@@ -96,6 +96,15 @@ pre[data-rtl-text] code {
   direction: ltr;
 }
 
+/* §3.4/§8.F — a SIGNED number ("-5", "+3") in RTL has its sign detached by the browser and
+ * renders "5-" (reads "5 minus"). JS wraps the run in <span data-rtl-num>; isolating it as an
+ * LTR unit keeps the sign with its number ("-5"). Code point untouched. Hebrew prefixes
+ * ("ל-15") and ranges ("5-10") are NOT wrapped (the engine excludes them). */
+[data-rtl-num] {
+  unicode-bidi: isolate;
+  direction: ltr;
+}
+
 /* Islands wrapped by JS (§3.6) isolate like UBA isolates; nesting works. */
 [data-rtl-island] {
   unicode-bidi: isolate;
