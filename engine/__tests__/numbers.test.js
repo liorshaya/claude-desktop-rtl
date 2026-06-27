@@ -87,3 +87,50 @@ test('signedNumberRuns: none / empty', () => {
   assert.deepEqual(signed('5 מעלות'), []);   // bare number, no sign
   assert.deepEqual(signed('100%'), []);
 });
+
+test('signedNumberRuns: every non-alphanumeric opener is a valid sign boundary', () => {
+  assert.deepEqual(signed('(-5)'), ['-5']);
+  assert.deepEqual(signed('[-5]'), ['-5']);
+  assert.deepEqual(signed('{-5}'), ['-5']);
+  assert.deepEqual(signed('=-5'), ['-5']);
+  assert.deepEqual(signed(',-5'), ['-5']);
+  assert.deepEqual(signed(':-5'), ['-5']);
+  assert.deepEqual(signed('/-5'), ['-5']);
+  assert.deepEqual(signed('"-5"'), ['-5']);
+  assert.deepEqual(signed('\t-5'), ['-5']);
+});
+
+test('signedNumberRuns: number formats — decimal, grouped, Persian/Arabic, U+2212', () => {
+  assert.deepEqual(signed('+3.14'), ['+3.14']);
+  assert.deepEqual(signed('-0.5'), ['-0.5']);
+  assert.deepEqual(signed('-1,000'), ['-1,000']);
+  assert.deepEqual(signed('-1,234.56'), ['-1,234.56']);
+  assert.deepEqual(signed('+٣'), ['+٣']);          // Arabic-Indic
+  assert.deepEqual(signed('-۵'), ['-۵']);          // Persian
+  assert.deepEqual(signed('−7'), ['−7']);          // U+2212 minus
+});
+
+test('signedNumberRuns: NOT a sign — after a letter/digit, or with no digits', () => {
+  assert.deepEqual(signed('a-5'), []);             // after a letter
+  assert.deepEqual(signed('5-5'), []);             // after a digit (range / subtraction)
+  assert.deepEqual(signed('-5-5'), ['-5']);        // only the boundary one
+  assert.deepEqual(signed('x+5'), []);             // after a letter
+  assert.deepEqual(signed('- 5'), []);             // space after the sign
+  assert.deepEqual(signed('-abc'), []);            // no digits after the sign
+});
+
+test('signedNumberRuns: Hebrew context, multiple, prefix excluded', () => {
+  assert.deepEqual(signed('הטמפרטורה -5 מעלות'), ['-5']);
+  assert.deepEqual(signed('ירידה של -10 אחוז'), ['-10']);
+  assert.deepEqual(signed('הערכים -3 ועוד +7 שונים'), ['-3', '+7']);
+  assert.deepEqual(signed('בין -5 ל-15 מעלות'), ['-5']);   // "ל-15" is a prefix, not a sign
+  assert.deepEqual(signed('(-273) הוא האפס המוחלט'), ['-273']);
+});
+
+test('signedNumberRuns: English context, multiple', () => {
+  assert.deepEqual(signed('from -40 to +50 degrees'), ['-40', '+50']);
+  assert.deepEqual(signed('between -5 and -10'), ['-5', '-10']);
+  assert.deepEqual(signed('the value (-3) is negative'), ['-3']);
+  assert.deepEqual(signed('set x = -7 now'), ['-7']);
+  assert.deepEqual(signed('temperatures -1, -2, -3'), ['-1', '-2', '-3']);
+});

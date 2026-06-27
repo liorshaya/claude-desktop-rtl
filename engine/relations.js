@@ -67,6 +67,13 @@ function isDigitCh(ch) {
 function isSign(ch) {
   return ch === '+' || ch === '-' || ch === '−'; // + - −(U+2212)
 }
+// Currency that can prefix or suffix a number operand ($5, 5₪). isSuffix also covers %/°.
+const CURRENCY = '$₪€£¥¢₹₣';
+function isCurrency(ch) { return ch !== '' && CURRENCY.indexOf(ch) !== -1; }
+function isSuffix(ch) { return ch === '%' || ch === '°' || isCurrency(ch); } // 50% 10° 5₪
+// '.'/',' are number-internal separators (3.14, 1,000) — counted ONLY between two digits, so a
+// sentence period ("2.") and a list comma ("x, y") never join an operand.
+function isSep(ch) { return ch === '.' || ch === ','; }
 // A connector that may CHAIN terms inside one expression: any mirror relation, plus the
 // symmetric comparators `=` and `≠` (not Bidi_Mirrored, so never a seed on their own, but they
 // belong in a chain like "0 ≤ x = 4"). Tag `< >` are filtered by the caller via inTag.
@@ -101,33 +108,46 @@ function relationRuns(text) {
 
   // Start index of the TERM ending at `end` (exclusive), '' if none. Attaches a leading sign
   // when the term is a number and the sign sits at a word boundary (not after a letter/number).
+  // An OPERAND is: optional leading currency, optional sign (on a number, at a word boundary),
+  // a BODY of letters/digits with '.'/',' separators between digits, and optional trailing
+  // %/°/currency. termStartLeft returns the operand's start index for the operand ending at
+  // `end` (exclusive), or `end` if there is none. Scans right-to-left.
   function termStartLeft(end) {
     let i = end;
+    while (i > 0 && isSuffix(ch(i - 1))) i -= 1; // trailing suffix(es): 50%, 10°, 5₪
+    const bodyEnd = i;
     for (;;) {
       if (i > 0 && isTermChar(ch(i - 1))) { i -= 1; continue; }
-      // a '.' is part of the number only BETWEEN two term chars (decimal), never a trailing dot
-      if (i > 1 && ch(i - 1) === '.' && i < end && isTermChar(ch(i - 2))) { i -= 1; continue; }
+      // a separator joins the number only BETWEEN two digits (3.14, 1,000)
+      if (i > 1 && i < bodyEnd && isSep(ch(i - 1)) && isDigitCh(ch(i - 2)) && isDigitCh(ch(i))) {
+        i -= 1; continue;
+      }
       break;
     }
-    if (i === end) return end; // no term chars
-    if (i > 0 && isSign(ch(i - 1)) && isDigitCh(ch(i))) {
-      if (i - 1 === 0 || !LETTER_OR_NUMBER.test(ch(i - 2))) i -= 1; // boundary → it IS a sign
+    if (i === bodyEnd) return end; // no body → the suffixes (if any) weren't an operand
+    if (i > 0 && isCurrency(ch(i - 1))) i -= 1; // leading currency: $5, ₪5
+    if (i > 0 && isSign(ch(i - 1)) && (isDigitCh(ch(i)) || isCurrency(ch(i)))) {
+      if (i - 1 === 0 || !LETTER_OR_NUMBER.test(ch(i - 2))) i -= 1; // sign at a boundary: -5, -$5
     }
     return i;
   }
-  // End index (exclusive) of the TERM starting at `start`, with an optional leading sign on a
-  // number; returns `start` if there is no term there.
+  // Mirror of termStartLeft: the operand's end index (exclusive) for the operand starting at
+  // `start`, or `start` if there is none. Scans left-to-right.
   function termEndRight(start) {
     let i = start;
-    if (isSign(ch(i)) && i + 1 < len && isDigitCh(ch(i + 1))) i += 1; // signed operand
-    const t0 = i;
+    if (isSign(ch(i)) && i + 1 < len && (isDigitCh(ch(i + 1)) || isCurrency(ch(i + 1)))) i += 1; // -5, -$5
+    if (isCurrency(ch(i))) i += 1; // leading currency: $5
+    const body0 = i;
     for (;;) {
       if (i < len && isTermChar(ch(i))) { i += 1; continue; }
-      // a '.' is a decimal only with a term char on BOTH sides — not a sentence-final period
-      if (i > t0 && ch(i) === '.' && i + 1 < len && isTermChar(ch(i + 1))) { i += 1; continue; }
+      if (i > body0 && isSep(ch(i)) && isDigitCh(ch(i - 1)) && i + 1 < len && isDigitCh(ch(i + 1))) {
+        i += 1; continue;
+      }
       break;
     }
-    return i === t0 ? start : i;
+    if (i === body0) return start; // a lone currency/sign with no number body → not an operand
+    while (i < len && isSuffix(ch(i))) i += 1; // trailing suffix(es): %, °, currency
+    return i;
   }
   // Grow the run leftward from the seed over (CONNECTOR WS? TERM) pairs.
   function expandLeft(relStart) {
