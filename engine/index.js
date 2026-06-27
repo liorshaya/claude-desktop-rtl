@@ -42,6 +42,7 @@ const api = {
   // §8.F math-relation mirroring (UBA mirrors these; we isolate them LTR)
   isMirroredMathRel: relations.isMirroredMathRel,
   hasMirroredMathRel: relations.hasMirroredMathRel,
+  relationOffsets: relations.relationOffsets,
   // §8.D code-fence-vs-prose
   looksLikeCode: code.looksLikeCode,
   codeBlockIsProse: code.codeBlockIsProse,

@@ -248,13 +248,18 @@ function wrapRelationsInBlock(block) {
 
 function splitRelations(node) {
   const text = node.nodeValue;
+  // Only these offsets are isolated: every mirror-relation EXCEPT the < > of an HTML tag
+  // (those would read ">div<" if isolated; the engine leaves them to UBA).
+  const offsets = relationOffsets(text);
+  if (!offsets.length) return; // e.g. a node whose only "relations" are tag brackets
+  const set = new Set(offsets);
   const frag = document.createDocumentFragment();
   let buf = '';
   for (let i = 0; i < text.length; ) {
     const cp = text.codePointAt(i);
     const w = cp > 0xffff ? 2 : 1;
     const ch = text.slice(i, i + w);
-    if (isMirroredMathRel(cp)) {
+    if (set.has(i)) {
       if (buf) { frag.appendChild(document.createTextNode(buf)); buf = ''; }
       const span = document.createElement('span');
       span.setAttribute('data-rtl-relation', '');

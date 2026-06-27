@@ -28,6 +28,43 @@ function hasMirroredMathRel(str) {
   return false;
 }
 
+// `<` and `>` are DUAL-USE: a comparison operator ("3 < 5") AND an HTML-tag delimiter
+// ("<div>"). A comparison must be isolated (so it doesn't read "3 > 5"); a TAG must NOT —
+// its brackets sit at the ends, and isolating each one un-mirrors the glyph but RTL still
+// swaps their positions, so "<div>" would read ">div<". A bare tag is rendered correctly by
+// UBA on its own (the glyph-mirror and the position-swap cancel out), so we leave tag
+// brackets alone. This regex matches a tag run: `<` or `</` immediately followed by a tag
+// name, up to its closing `>` (<div>, </div>, <br/>, <a href="x">). A `<` with a space or a
+// digit after it is NOT a tag, so real comparisons ("3 < 5", "a < b", "x<y") still isolate.
+const TAG_RUN = /<\/?[A-Za-z][^<>]*>/g;
+
+// UTF-16 offsets of the mirror-relation chars to ISOLATE in `text`. Every isMirroredMathRel
+// char qualifies EXCEPT a `<`/`>` that belongs to a tag run (left to UBA). The unambiguous
+// relations (≤ ≥ ∈ ⊂ …) always isolate; only the dual-use `< >` are filtered. PURE; offsets
+// index the input string (astral-safe).
+function relationOffsets(text) {
+  const out = [];
+  if (!text) return out;
+  const tags = [];
+  TAG_RUN.lastIndex = 0;
+  let m;
+  while ((m = TAG_RUN.exec(text))) tags.push([m.index, m.index + m[0].length]);
+  const inTag = (i) => {
+    for (let k = 0; k < tags.length; k++) if (i >= tags[k][0] && i < tags[k][1]) return true;
+    return false;
+  };
+  for (let i = 0; i < text.length; ) {
+    const cp = text.codePointAt(i);
+    const w = cp > 0xffff ? 2 : 1;
+    if (isMirroredMathRel(cp)) {
+      const ch = text[i];
+      if (!((ch === '<' || ch === '>') && inTag(i))) out.push(i);
+    }
+    i += w;
+  }
+  return out;
+}
+
 // __EXPORTS__ (everything below is stripped when inlined into the browser payload)
-const api = { isMirroredMathRel, hasMirroredMathRel };
+const api = { isMirroredMathRel, hasMirroredMathRel, relationOffsets };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
