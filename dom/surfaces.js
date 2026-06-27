@@ -29,6 +29,9 @@ const SELECTORS = {
   // Blocks with a direction-dependent DECORATION (list markers/indent, blockquote bar)
   // get an explicit dir so the decoration lands on the content's side (§6).
   dirBlock: 'ul, ol, li, blockquote',
+  // Headings/paragraphs where CSS `plaintext` first-strong can misfire on a Latin/marker
+  // opener of a Hebrew block ("8c. בדיקה…", "React הוא…"); we override only then (§3.2/§8.K).
+  proseDir: 'p, h1, h2, h3, h4, h5, h6',
 };
 
 function qsa(selector, root) {
@@ -61,6 +64,10 @@ function findDirBlocks(root) {
   return qsa(SELECTORS.dirBlock, root);
 }
 
+function findProseDirBlocks(root) {
+  return qsa(SELECTORS.proseDir, root);
+}
+
 // Read a <table> as plain text for the engine (§3.2): the header row (the column-order
 // tie-break) and EVERY cell (drives the majority column-order decision in tableDir).
 // Returns { headers, allCells }.
@@ -74,6 +81,6 @@ function readTableShape(table) {
 // __EXPORTS__ (everything below is stripped when inlined into the browser payload)
 const api = {
   SELECTORS, qsa, findInputs, findMessageRoots, findTables, findCodeBlocks,
-  findLeafBlocks, findDirBlocks, readTableShape,
+  findLeafBlocks, findDirBlocks, findProseDirBlocks, readTableShape,
 };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;

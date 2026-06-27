@@ -27,6 +27,13 @@
   overflow-wrap: anywhere;
 }
 
+/* §3.2/§8.K — a heading/paragraph our engine judged RTL despite a misleading Latin opener
+ * ("8c. בדיקה…", "React הוא ספרייה") is fixed by JS, which sets `direction: rtl;
+ * unicode-bidi: isolate` INLINE with !important (plaintextOverrideDir → processProseDir).
+ * Inline !important is required: `plaintext` ignores the direction property, and Claude
+ * hard-sets direction:ltr at unknown specificity — only inline reliably wins both. The
+ * data-rtl-dir attribute here is just an idempotency stamp / debugging hook (no CSS). */
+
 /* RTL list markers/indent are handled by dir="auto" on each list/item (apply.js, §6) —
  * that hangs the marker on the content's start side with the native gap. The [dir] rules
  * below carry the direction. */

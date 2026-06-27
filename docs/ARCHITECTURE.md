@@ -141,17 +141,26 @@ always `null` (= leave inherited/default), never a forced `'rtl'`.** This is the
 single biggest correctness fix over naive first-strong-only tools.
 
 **How the decision is applied — the rule that kills the "English-doc-forced-RTL" bug
-(see §8.K):** for **prose blocks we do NOT write a `dir` attribute from JS at all.**
-CSS `unicode-bidi: plaintext` on each leaf block (§4) is the *sole* base-direction
+(see §8.K):** for **prose blocks we almost never write a `dir` attribute from JS.**
+CSS `unicode-bidi: plaintext` on each leaf block (§4) is the *primary* base-direction
 mechanism — it runs the browser's own first-strong per block, on that block's own
 content, **immune to any ancestor's `direction`**. So a pure-English paragraph stays
 LTR even when the surrounding document/message contains Hebrew elsewhere, and a Hebrew
 paragraph flips RTL even inside an English doc. JS writes an explicit `dir` **only**
 where CSS cannot express the result: `dir="rtl"` on a `<table>` to flip column order
-(§3.2), and `dir="auto"` on input/edit boxes and JS-created islands (§3.6). **We never
+(§3.2), `dir="auto"` on input/edit boxes and JS-created islands (§3.6), and — the **one
+prose exception** — `dir="rtl"` on a heading/paragraph in the narrow case CSS `plaintext`
+provably **misfires**: a Hebrew block that OPENS with Latin (a section marker `8c. בדיקה…`,
+a brand `React הוא ספרייה`) where first-strong is LTR yet the block is majority-RTL
+(`plaintextOverrideDir`, below). That override is **safe by construction for §8.K** — a
+majority-English block returns `null`, so English is never flipped. **We never
 set `dir` on a container / message-root because "it contains RTL"** — that one mistake
-is what flips an entire English document RTL in every existing tool. `detectBlockDir`
-exists to *drive table/island/streaming-settle decisions*, not to stamp every paragraph.
+is what flips an entire English document RTL in every existing tool. The detectors
+(`resolvedDir` for decoration side + arrow gating, `tableDir`/`cellDir`/`columnDirs` for
+tables, `plaintextOverrideDir` for the prose override) exist to *decide where the engine
+acts*, not to stamp every paragraph. *(`detectBlockDir` is the legacy first-strong-with-
+leading-strip detector; it over-strips English openers, so the DOM now uses `resolvedDir`,
+which matches the actual `plaintext` render. `detectBlockDir` stays a pure engine utility.)*
 
 **Context-specific detectors:**
 - **Table cell** (`cellDir`): a cell is RTL if it *contains any* RTL char (header
@@ -178,6 +187,15 @@ exists to *drive table/island/streaming-settle decisions*, not to stamp every pa
     flip. *(Alternative considered: per-cell natural alignment — rejected because a mixed
     cell inside a column would zig-zag; per-column keeps columns clean. r12a's homogeneity
     allowance.)*
+- **Prose plaintext-override** (`plaintextOverrideDir`): the one place JS sets `dir` on a
+  heading/paragraph. CSS `plaintext` runs pure UBA first-strong, which misfires when a
+  Hebrew block OPENS with Latin — a marker (`8c. בדיקת…`) or brand/term (`React הוא ספרייה`):
+  first-strong is the Latin char → LTR, wrong. The override fires *only* when first-strong is
+  LTR **and** `majority` is RTL → `dir="rtl"`; otherwise `null` and CSS keeps owning it. The
+  **majority** test is the safe discriminator: an English sentence with embedded Hebrew (`The
+  term שלום means peace`) is majority-LTR → `null`, so English is never flipped (§8.K). Pure-
+  digit markers (`3.2.1 …`) need no help — UBA skips digits, so first-strong is already RTL.
+  *(Lior-approved relaxation of "never set `dir` on prose"; cf. the matching CLAUDE.md rule.)*
 
 ### 3.3 Streaming-settle (anti-flicker) — *beyond existing tools*
 During streaming a paragraph may start `"In React…"` (first-strong LTR) and end up
@@ -445,12 +463,18 @@ For each: the failure, and our handling. "Smooth" means these all Just Work.
   the right edge.
 - **The reverse** (a mostly-Hebrew doc with English blocks) must keep those English
   blocks LTR — same mechanism, no special-casing.
+- **Latin-opener of a Hebrew block** (`8c. בדיקת אי-שוויונים…`, `React הוא ספרייה`,
+  `v2.0 שחרור`): CSS `plaintext` first-strong latches on the leading Latin char and renders
+  the block **LTR**, even though it is a Hebrew heading/paragraph (Gemini gets this right;
+  naive plaintext does not). Fixed by `plaintextOverrideDir` (§3.2): first-strong LTR **and**
+  majority RTL → `dir="rtl"`. The majority gate keeps it **§8.K-safe** — an English sentence
+  that merely *contains* Hebrew (`The term שלום means peace`) is majority-LTR → not flipped.
 - **Our guarantee:** per-leaf-block `unicode-bidi: plaintext` makes every block
-  self-determine from its *own* content, immune to ancestors; JS never writes `dir` on
-  prose blocks or on the container (§3.2, §5). Mixed-direction documents therefore
-  render block-by-block correctly with **no global flip.** This is a front-and-centre
-  corpus case (§13): a long English doc with scattered Hebrew examples → assert every
-  English block stays LTR and only the Hebrew ones flip.
+  self-determine from its *own* content, immune to ancestors; JS writes `dir` on a prose
+  block only in the narrow majority-RTL plaintext-misfire case above, never on the container
+  (§3.2, §5). Mixed-direction documents therefore render block-by-block correctly with **no
+  global flip.** This is a front-and-centre corpus case (§13): a long English doc with
+  scattered Hebrew examples → assert every English block stays LTR and only the Hebrew ones flip.
 
 ---
 

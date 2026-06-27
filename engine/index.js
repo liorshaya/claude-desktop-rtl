@@ -30,6 +30,8 @@ const api = {
   cellDir: detect.cellDir,
   tableDir: detect.tableDir,
   columnDirs: detect.columnDirs,
+  plaintextOverrideDir: detect.plaintextOverrideDir,
+  resolvedDir: detect.resolvedDir,
   // §3.5 math vs currency
   segmentMath: math.segmentMath,
   // §8.F arrow mirroring

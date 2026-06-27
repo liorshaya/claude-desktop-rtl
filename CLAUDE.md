@@ -6,11 +6,15 @@ the single source of truth.** Section refs (§) point to it.
 
 ## Hard rules (never violate)
 - `engine/` is PURE and DOM-free (no document/window). Must stay unit-testable.
-- CSS `unicode-bidi: plaintext` per leaf block is the SOLE base-direction mechanism
-  for prose. JS NEVER sets `dir` on a prose block or a container — only on `<table>`
-  (column flip), on input boxes / JS-created islands, and on DECORATED blocks
-  (`<ul>/<ol>/<li>` markers, `<blockquote>` bar) where the decoration must sit on the
-  content side — via content-derived `detectBlockDir` (§6; self-determining, §8.K holds). (§3.2, §8.K)
+- CSS `unicode-bidi: plaintext` per leaf block is the PRIMARY base-direction mechanism
+  for prose. JS sets `dir` on a prose block only in tightly-scoped, content-derived cases —
+  never on a container, never because "it contains RTL". The sanctioned cases: `<table>`
+  (column flip), input boxes / JS-created islands, DECORATED blocks (`<ul>/<ol>/<li>`
+  markers, `<blockquote>` bar) via `resolvedDir` (the side the content actually renders to —
+  NOT `detectBlockDir`, which over-strips English openers and mis-places the bar), and — the
+  one heading/paragraph case — when CSS `plaintext` provably misfires on a Latin/marker
+  opener of a majority-RTL block (`plaintextOverrideDir`: first-strong LTR **and** majority
+  RTL → `dir="rtl"`; majority-English stays put, so §8.K holds). (§3.2, §8.K)
 - Direction-detection fallback is `null`, never a forced `'rtl'`. (§3.2)
 - NEVER inject U+200E/200F or any bidi control char — copy/paste & Ctrl-F must return
   Claude's text byte-for-byte. (§3.6, §8.J)

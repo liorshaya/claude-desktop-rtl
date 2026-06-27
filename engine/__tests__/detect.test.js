@@ -3,6 +3,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const {
   firstStrong, majority, stripLeadingNoise, detectBlockDir, cellDir, tableDir, columnDirs,
+  plaintextOverrideDir, resolvedDir,
 } = require('../detect.js');
 
 test('firstStrong: first strong char wins, neutrals skipped', () => {
@@ -128,6 +129,58 @@ test('columnDirs: per-column majority for alignment (§3.2)', () => {
   // Neutral (number) column → null; ragged rows are fine.
   assert.deepEqual(columnDirs([['#', 'שם'], ['1', 'דני'], ['2']]), [null, 'rtl']);
   assert.deepEqual(columnDirs([]), []);
+});
+
+test('plaintextOverrideDir: fixes a Latin/marker-led RTL block that plaintext mis-reads LTR', () => {
+  // FIRES — block opens with Latin (plaintext picks LTR) but is majority-Hebrew → force rtl.
+  for (const s of [
+    '8c. בדיקת אי-שוויונים ויחסי סדר — Claude RTL × LaTeX', // the report (number+letter marker)
+    'v2.0 שחרור חדש של המערכת שלנו',                        // version opener
+    'Q3. סיכום הרבעון הפיננסי האחרון',                      // letter+digit marker
+    'React הוא ספרייה פופולרית מאוד בקהילה',                // brand opener
+    'iPhone הוא מכשיר פופולרי מאוד בעולם',
+    'API הוא ממשק שמאפשר תקשורת בין מערכות',
+  ]) {
+    assert.equal(plaintextOverrideDir(s), 'rtl', s);
+  }
+});
+
+test('plaintextOverrideDir: NEVER flips an English block (§8.K safety)', () => {
+  // STAYS null — majority-English, even with embedded Hebrew words / a leading marker.
+  for (const s of [
+    'The term שלום means peace and שלום is common',
+    'Hello world this is plain English text',
+    'I am building a new app with React and Vite',
+    'In Hebrew the word שלום is a common greeting',
+    '8c. Introduction to inequalities and order',          // marker but English content
+    'v2.0 release notes are published here today',
+    'We use unicode-bidi: plaintext per leaf block here',
+    'A great example is the שלום greeting used in apps',
+  ]) {
+    assert.equal(plaintextOverrideDir(s), null, s);
+  }
+});
+
+test('plaintextOverrideDir: leaves plaintext alone when it is already right', () => {
+  assert.equal(plaintextOverrideDir('3.2.1 הסעיף על יחסי סדר'), null); // digit-only marker → plaintext already rtl
+  assert.equal(plaintextOverrideDir('8. בדיקה רגילה'), null);          // plaintext already rtl
+  assert.equal(plaintextOverrideDir('שלום world'), null);              // firstStrong already rtl
+  assert.equal(plaintextOverrideDir('Use קוד'), null);                 // majority tie → no flip
+  assert.equal(plaintextOverrideDir(''), null);
+  assert.equal(plaintextOverrideDir('12345'), null);
+});
+
+test('resolvedDir: the side a block actually renders to (for marker/bar placement)', () => {
+  // English-first block → LTR (the blockquote-bar bug: detectBlockDir wrongly said rtl).
+  assert.equal(resolvedDir('Quote starting in English ואז ממשיך בעברית.'), 'ltr');
+  assert.equal(detectBlockDir('Quote starting in English ואז ממשיך בעברית.'), 'rtl'); // contrast
+  // Hebrew-first → RTL; override cases → RTL; neutral → null.
+  assert.equal(resolvedDir('ציטוט פשוט בעברית בלבד.'), 'rtl');
+  assert.equal(resolvedDir('ציטוט עם מספר 42 וסימן % באמצע.'), 'rtl');
+  assert.equal(resolvedDir('8c. בדיקת אי-שוויונים — Claude RTL'), 'rtl'); // marker-opener override
+  assert.equal(resolvedDir('React הוא ספרייה פופולרית מאוד'), 'rtl');     // brand-opener override
+  assert.equal(resolvedDir('The term שלום means peace'), 'ltr');          // English majority
+  assert.equal(resolvedDir('   '), null);
 });
 
 test('fidelity: stripLeadingNoise injects no bidi controls (output is a tail of input)', () => {

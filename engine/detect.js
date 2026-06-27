@@ -137,6 +137,32 @@ function columnDirs(rows) {
   return cols.map((dirs) => majorityOfDirs(dirs));
 }
 
+// Override the CSS `plaintext` base direction ONLY where its naive UBA first-strong
+// demonstrably misfires (§3.2, §8.K). CSS `plaintext` runs pure first-strong, so a Hebrew
+// block that OPENS with Latin — a section/list marker ("8c. …", "v2.0 …"), or a brand/term
+// ("React הוא ספרייה") — is rendered LTR because the first strong char is the Latin one.
+// We catch exactly that: first-strong is LTR (plaintext would go LTR) AND the block is
+// majority-RTL → force 'rtl'. Else null (leave plaintext untouched — no churn). Majority is
+// the safe discriminator: a real English sentence with embedded Hebrew ("The term שלום
+// means peace") is majority-LTR → null, so English is NEVER flipped (§8.K holds). Pure-digit
+// markers ("3.2.1 …") need no help — UBA skips digits, so first-strong is already RTL.
+function plaintextOverrideDir(text) {
+  if (!text) return null;
+  if (firstStrong(text) !== 'ltr') return null; // plaintext already right (or neutral)
+  return majority(text) === 'rtl' ? 'rtl' : null; // Latin opener but Hebrew-majority → RTL
+}
+
+// The direction a leaf block ACTUALLY renders as: what CSS `plaintext` resolves (UBA first-
+// strong), unless `plaintextOverrideDir` kicks in (a Latin/marker opener of a majority-RTL
+// block). 'rtl' | 'ltr' | null (neutral). Use this — NOT `detectBlockDir` — to place a
+// direction-dependent DECORATION (list marker, blockquote bar) on the side the content truly
+// renders to, and to gate arrow mirroring (§8.F). `detectBlockDir` strips leading English
+// words and so reports RTL for an English-first block ("Quote starting in English … עברית"),
+// putting the bar on the wrong side; `resolvedDir` matches the actual render.
+function resolvedDir(text) {
+  return plaintextOverrideDir(text) || firstStrong(text);
+}
+
 // __EXPORTS__ (everything below is stripped when inlined into the browser payload)
-const api = { firstStrong, majority, stripLeadingNoise, detectBlockDir, cellDir, tableDir, columnDirs };
+const api = { firstStrong, majority, stripLeadingNoise, detectBlockDir, cellDir, tableDir, columnDirs, plaintextOverrideDir, resolvedDir };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;

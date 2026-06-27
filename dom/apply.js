@@ -93,6 +93,12 @@ function processAdded(node) {
   if (node.matches && node.matches(SELECTORS.dirBlock)) processDirBlock(node);
   const dirBlocks = node.querySelectorAll ? node.querySelectorAll(SELECTORS.dirBlock) : [];
   for (let i = 0; i < dirBlocks.length && i < MAX_NODES_PER_PASS; i++) processDirBlock(dirBlocks[i]);
+  // Prose dir override SYNCHRONOUSLY too (§3.2/§8.K) — so a heading/paragraph that needs the
+  // Latin/marker-opener flip is RTL on FIRST paint, with no visible LTR→RTL flicker when you
+  // open a chat. (Was debounced-only, which is exactly what caused the flip.)
+  if (node.matches && node.matches(SELECTORS.proseDir)) processProseDir(node);
+  const proseBlocks = node.querySelectorAll ? node.querySelectorAll(SELECTORS.proseDir) : [];
+  for (let i = 0; i < proseBlocks.length && i < MAX_NODES_PER_PASS; i++) processProseDir(proseBlocks[i]);
 }
 
 // Tables have TWO independent layers (§3.2). Layer 1: column-ORDER — flip the <table>'s
@@ -168,7 +174,7 @@ function wrapArrowsInBlock(block) {
   if (block.getAttribute(ARROWS_ATTR) === '1') return;
   block.setAttribute(ARROWS_ATTR, '1');
   if (!hasMirrorArrow(block.textContent || '')) return;
-  if (detectBlockDir(block.textContent || '') !== 'rtl') return; // mirror only in RTL blocks
+  if (resolvedDir(proseText(block)) !== 'rtl') return; // mirror only where the block renders RTL
   const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT, {
     acceptNode: (n) => {
       if (!n.nodeValue || !hasMirrorArrow(n.nodeValue)) return NodeFilter.FILTER_REJECT;
@@ -212,14 +218,83 @@ function splitArrows(node) {
 }
 
 // §6 — blocks whose DECORATION depends on direction (list marker/indent, blockquote bar)
-// are the Lior-approved exception where JS sets dir, so the decoration sits on the content
-// side. We use the engine's detection (not plain dir="auto"): it strips leading English/
-// brand words and falls back to majority, so a block that OPENS in English but is mostly
-// Hebrew still reads RTL. null (neutral-only) → dir="auto". Never overwrite an explicit dir.
+// ALWAYS get an explicit dir, placed on the side the content ACTUALLY renders to. That side
+// is `resolvedDir` (plaintext first-strong, or our override) — NOT `detectBlockDir`, which
+// strips leading English words and so put the bar on the WRONG side of an English-first
+// quote ("Quote starting in English … עברית", the reported bug). When the override fires on
+// a leaf-content block (li/blockquote) we also inline-flip the content (applyRtlOverride);
+// ul/ol containers only need the marker side (their items self-handle). Never overwrite an
+// explicit dir.
 function processDirBlock(el) {
   if (el.getAttribute('dir')) return;
   if (el.closest('pre, code')) return; // inside a source/code view → stays LTR
-  el.setAttribute('dir', detectBlockDir(el.textContent || '') || 'auto');
+  const t = proseText(el);
+  if (plaintextOverrideDir(t) === 'rtl' && el.matches && el.matches('li, blockquote')) {
+    applyRtlOverride(el); // content + bar both RTL
+    return;
+  }
+  el.setAttribute('dir', resolvedDir(t) || 'auto'); // marker/bar follows the actual render
+}
+
+// Prose text of a block for direction detection — EXCLUDES isolated math/code islands,
+// mirroring what CSS `plaintext` actually sees (an isolated inline is a neutral object to
+// the parent's bidi, so it never votes on base direction). KaTeX is the motivating case:
+// its HIDDEN MathML <annotation> carries the LaTeX source (`\le`, `\subseteq`, `\in` …),
+// which `textContent` would otherwise count as Latin and wrongly tip a Hebrew explanation's
+// majority to LTR — so the override never fired on "KaTeX: …" lines. Falls back to plain
+// textContent when there are no islands (or no DOM API, e.g. unit tests).
+function proseText(el) {
+  if (!el) return '';
+  const ISLAND = SELECTORS.math + ', ' + SELECTORS.code;
+  let raw;
+  if (!el.querySelector || typeof document === 'undefined' || !document.createTreeWalker
+      || !el.querySelector(ISLAND)) {
+    raw = el.textContent || '';
+  } else {
+    raw = '';
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, {
+      acceptNode: (n) => {
+        const p = n.parentElement;
+        return p && p.closest && p.closest(ISLAND) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
+      },
+    });
+    let n;
+    while ((n = walker.nextNode())) raw += n.nodeValue;
+  }
+  // Also drop RAW (not-yet-rendered) math runs — segmentMath keeps currency ($5), strips
+  // real LaTeX ($x \le y$). Guards the window before KaTeX renders, when the LaTeX source
+  // would still be live text and could pollute the majority just like the MathML annotation.
+  return segmentMath(raw).filter((s) => s.type === 'text').map((s) => s.value).join('');
+}
+
+// Force a prose block to render RTL (§3.2/§8.K) — content AND any direction-dependent
+// decoration. INLINE `!important` is required for two reasons: (1) the leaf CSS sets
+// `unicode-bidi: plaintext`, which takes base direction from first-strong and IGNORES the
+// `direction` property — so a bare `dir` does nothing; switching to `isolate` makes
+// direction govern; and (2) Claude hard-sets `direction: ltr` at unknown specificity — only
+// inline reliably wins. The `dir` attribute (a11y/caret + the blockquote-bar / list-marker
+// CSS key off it) and data-rtl-dir (idempotency stamp) come along. Lior-approved narrow
+// relaxation of "no dir/direction on prose".
+function applyRtlOverride(el) {
+  el.setAttribute('data-rtl-dir', 'rtl');
+  el.setAttribute('dir', 'rtl');
+  if (el.style && el.style.setProperty) {
+    el.style.setProperty('direction', 'rtl', 'important');
+    el.style.setProperty('unicode-bidi', 'isolate', 'important');
+    el.style.setProperty('text-align', 'right', 'important');
+  }
+}
+
+// §3.2/§8.K — headings/paragraphs are owned by CSS `plaintext` EXCEPT when plaintext's
+// first-strong misfires on a Latin/marker opener of a majority-RTL block ("8c. בדיקה…",
+// "React הוא ספרייה"). Then force RTL; otherwise leave it untouched (English is never
+// flipped — plaintextOverrideDir returns null for a majority-English block). Idempotent.
+function processProseDir(el) {
+  if (el.getAttribute('data-rtl-dir')) return; // already overridden by us
+  if (el.getAttribute('dir')) return; // respect an explicit dir we didn't set
+  if (el.closest('pre, code')) return; // source/code view → stays LTR
+  if (el.closest('table')) return; // table cells have their own layering (§3.2)
+  if (plaintextOverrideDir(proseText(el)) === 'rtl') applyRtlOverride(el);
 }
 
 function processRoot(root) {
@@ -228,6 +303,8 @@ function processRoot(root) {
   for (let i = 0; i < tables.length && i < MAX_NODES_PER_PASS; i++) processTable(tables[i]);
   const dirBlocks = findDirBlocks(root);
   for (let i = 0; i < dirBlocks.length && i < MAX_NODES_PER_PASS; i++) processDirBlock(dirBlocks[i]);
+  const proseBlocks = findProseDirBlocks(root);
+  for (let i = 0; i < proseBlocks.length && i < MAX_NODES_PER_PASS; i++) processProseDir(proseBlocks[i]);
   const codeBlocks = findCodeBlocks(root);
   for (let i = 0; i < codeBlocks.length && i < MAX_NODES_PER_PASS; i++) processCodeBlock(codeBlocks[i]);
   const leaves = findLeafBlocks(root);
