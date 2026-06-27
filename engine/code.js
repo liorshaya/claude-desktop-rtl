@@ -15,22 +15,30 @@ const CODE_CALL = /[A-Za-z_$][\w$]*\s*\(/; // identifier immediately followed by
 const CODE_INDENT = /^[ \t]{2,}\S/m; // a line that begins with real indentation
 const CODE_TAG = /<\/?[A-Za-z][\w-]*[\s/>]/; // HTML/XML/JSX tag
 
-function looksLikeCode(text) {
-  if (!text) return false;
+// "Strong" structural signals — natural-language prose virtually never has these. Kept
+// SEPARATE from indentation: a column-aligned Hebrew "table" inside a ``` fence also indents
+// (for its columns), so indentation ALONE must not count it as code (§8.D).
+function hasCodeStructure(text) {
   return (
     CODE_KEYWORD.test(text) ||
     CODE_OPERATOR.test(text) ||
     CODE_BRACES.test(text) ||
     CODE_CALL.test(text) ||
-    CODE_INDENT.test(text) ||
     CODE_TAG.test(text)
   );
 }
 
-// A fenced block should be rendered as RTL prose iff it CONTAINS RTL text and shows no
-// sign of being real code. The hasRTL gate means English / real code is never touched.
+function looksLikeCode(text) {
+  if (!text) return false;
+  return hasCodeStructure(text) || CODE_INDENT.test(text);
+}
+
+// A fenced block is RTL prose iff it CONTAINS RTL text and has no STRONG code structure.
+// Indentation ALONE does NOT disqualify it — that was wrongly keeping space-aligned Hebrew
+// "tables" (the tea/coffee tables) as LTR code with un-flipped arrows. Real code in any
+// language still has braces/keywords/operators/calls/tags; the hasRTL gate keeps English untouched.
 function codeBlockIsProse(text) {
-  return hasRTL(text) && !looksLikeCode(text);
+  return hasRTL(text) && !hasCodeStructure(text);
 }
 
 // __EXPORTS__ (everything below is stripped when inlined into the browser payload)

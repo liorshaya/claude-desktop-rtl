@@ -307,7 +307,12 @@ function proseText(el) {
     const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, {
       acceptNode: (n) => {
         const p = n.parentElement;
-        return p && p.closest && p.closest(ISLAND) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
+        if (!p || !p.closest) return NodeFilter.FILTER_ACCEPT;
+        const island = p.closest(ISLAND);
+        // A pre[data-rtl-text] is mis-fenced Hebrew PROSE (§8.D), not a real LTR island — its
+        // text DOES count (else arrows/relations in such a block never flip).
+        if (!island || island.closest('pre[data-rtl-text]')) return NodeFilter.FILTER_ACCEPT;
+        return NodeFilter.FILTER_REJECT;
       },
     });
     let n;
