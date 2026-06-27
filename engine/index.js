@@ -34,6 +34,7 @@ const api = {
   // §8.F arrow mirroring
   isMirrorArrow: arrows.isMirrorArrow,
   hasMirrorArrow: arrows.hasMirrorArrow,
+  arrowFlipOffsets: arrows.arrowFlipOffsets,
   // §8.D code-fence-vs-prose
   looksLikeCode: code.looksLikeCode,
   codeBlockIsProse: code.codeBlockIsProse,

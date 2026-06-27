@@ -43,7 +43,7 @@ code {
   direction: ltr;
   unicode-bidi: isolate;
 }
-.katex, .katex-display, mjx-container, math {
+.katex, .katex-display, mjx-container, .MathJax, math {
   direction: ltr;
   unicode-bidi: isolate;
 }

@@ -5,6 +5,8 @@
 // (fidelity hard rule §3.6) — the DOM layer wraps it and flips it with a CSS transform,
 // so copy/Ctrl-F still return the original glyph. PURE.
 
+const { segmentMath } = require('./math.js');
+
 // Arrow blocks. Flipping a vertical arrow (↑↓) horizontally is a no-op, and a diagonal
 // (↗) flips to its correct RTL counterpart (↖), so spanning whole blocks is safe.
 const ARROW_RANGES = [
@@ -31,6 +33,30 @@ function hasMirrorArrow(str) {
   return false;
 }
 
+// Which arrows in `text` are PROSE arrows that should be visually flipped in an RTL block —
+// returns their UTF-16 offsets. Arrows that fall inside a math run ($…$ / \(…\) / \[…\] /
+// $$…$$, per segmentMath) are LTR math semantics ("a → b" reads left-to-right even in
+// Hebrew) and are EXCLUDED. Currency `$…$` is not math, so arrows next to prices still
+// flip. The DOM layer additionally skips arrows inside *rendered* KaTeX/MathJax/MathML or
+// code islands (those text nodes never reach here). PURE; offsets index the input string.
+function arrowFlipOffsets(text) {
+  const out = [];
+  if (!text) return out;
+  const segs = segmentMath(text);
+  for (let s = 0; s < segs.length; s++) {
+    const seg = segs[s];
+    if (seg.type !== 'text') continue; // math run → its arrows keep their LTR direction
+    const v = seg.value;
+    for (let i = 0; i < v.length; ) {
+      const cp = v.codePointAt(i);
+      const w = cp > 0xffff ? 2 : 1;
+      if (isMirrorArrow(cp)) out.push(seg.start + i);
+      i += w;
+    }
+  }
+  return out;
+}
+
 // __EXPORTS__ (everything below is stripped when inlined into the browser payload)
-const api = { isMirrorArrow, hasMirrorArrow };
+const api = { isMirrorArrow, hasMirrorArrow, arrowFlipOffsets };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;

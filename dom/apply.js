@@ -118,7 +118,26 @@ function processCodeBlock(pre) {
 // data-rtl-arrow>; CSS does the flip. The character is preserved exactly, so copy/Ctrl-F
 // are byte-for-byte (§3.6 hard rule). Only RTL blocks are touched, and each block is
 // stamped so re-runs are O(new blocks).
+//
+// Math/code arrows are NOT flipped: "a → b" is universal LTR notation (it reads
+// left-to-right even in a Hebrew sentence), and the island is already LTR-isolated, so a
+// flip would reverse its meaning. Two guards cooperate: `inLtrIsland` skips text nodes
+// inside *rendered* KaTeX/MathJax/MathML or code; `arrowFlipOffsets` (engine) excludes
+// arrows inside a *raw* $…$/\(…\)/\[…\] run within a single text node. A mis-fenced
+// Hebrew-prose ``` block (data-rtl-text, §8.D) is prose, so its arrows still flip.
 const ARROWS_ATTR = 'data-rtl-arrows';
+
+// Is this text node inside an LTR math/code island whose arrows must stay LTR? A
+// `pre[data-rtl-text]` fence is mis-fenced RTL prose (§8.D), so it is NOT an island.
+function inLtrIsland(node) {
+  const el = node.parentElement;
+  if (!el || !el.closest) return false;
+  const island = el.closest(SELECTORS.math + ', ' + SELECTORS.code);
+  if (!island) return false;
+  if (island.closest('pre[data-rtl-text]')) return false; // mis-fenced prose → arrows flip
+  return true;
+}
+
 function wrapArrowsInBlock(block) {
   if (block.getAttribute(ARROWS_ATTR) === '1') return;
   block.setAttribute(ARROWS_ATTR, '1');
@@ -129,6 +148,7 @@ function wrapArrowsInBlock(block) {
       if (!n.nodeValue || !hasMirrorArrow(n.nodeValue)) return NodeFilter.FILTER_REJECT;
       const p = n.parentNode;
       if (p && p.hasAttribute && p.hasAttribute('data-rtl-arrow')) return NodeFilter.FILTER_REJECT;
+      if (inLtrIsland(n)) return NodeFilter.FILTER_REJECT; // rendered math/code → keep LTR
       return NodeFilter.FILTER_ACCEPT;
     },
   });
@@ -139,10 +159,18 @@ function wrapArrowsInBlock(block) {
 }
 
 function splitArrows(node) {
+  const text = node.nodeValue;
+  // Only these offsets are prose arrows; arrows inside a raw math run are excluded (engine).
+  const flip = arrowFlipOffsets(text);
+  if (!flip.length) return; // every arrow here is math → leave the node untouched
+  const flipSet = new Set(flip);
   const frag = document.createDocumentFragment();
   let buf = '';
-  for (const ch of node.nodeValue) {
-    if (isMirrorArrow(ch.codePointAt(0))) {
+  for (let i = 0; i < text.length; ) {
+    const cp = text.codePointAt(i);
+    const w = cp > 0xffff ? 2 : 1;
+    const ch = text.slice(i, i + w);
+    if (flipSet.has(i)) {
       if (buf) { frag.appendChild(document.createTextNode(buf)); buf = ''; }
       const span = document.createElement('span');
       span.setAttribute('data-rtl-arrow', '');
@@ -151,6 +179,7 @@ function splitArrows(node) {
     } else {
       buf += ch;
     }
+    i += w;
   }
   if (buf) frag.appendChild(document.createTextNode(buf));
   if (node.parentNode) node.parentNode.replaceChild(frag, node);

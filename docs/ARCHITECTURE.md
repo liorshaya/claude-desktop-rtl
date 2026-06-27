@@ -384,6 +384,15 @@ For each: the failure, and our handling. "Smooth" means these all Just Work.
   in RTL. `engine/arrows.js` `isMirrorArrow` classifies them; inside an RTL block the DOM
   wraps each in `<span data-rtl-arrow>` and CSS flips it with `transform: scaleX(-1)` —
   **visual only**, the code point is untouched so copy/Ctrl-F stay byte-for-byte (§3.6).
+  **Math/code arrows are the exception — they stay LTR.** An arrow inside a function or
+  mapping (`a → b`, `f: X → Y`, `a ⟹ b`) is universal LTR notation that reads
+  left-to-right even in a Hebrew sentence, and the math/code island is already
+  LTR-isolated, so flipping it would *reverse the meaning*. Two cooperating guards: the
+  DOM's `inLtrIsland` skips arrows inside **rendered** KaTeX/MathJax/MathML/code nodes,
+  and `engine/arrows.js` `arrowFlipOffsets` (via `segmentMath`, §3.5) excludes arrows
+  inside a **raw** `$…$`/`\(…\)`/`\[…\]`/`$$…$$` run. Currency `$…$` is *not* math, so an
+  arrow beside a price still flips. A mis-fenced Hebrew-prose ``` block (`data-rtl-text`,
+  §8.D) is prose, so its arrows still flip.
 
 ### G. Markdown structures
 - Nested blockquotes with per-level direction; task lists (`- [ ] משימה`); definition

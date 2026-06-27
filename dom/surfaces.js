@@ -18,7 +18,7 @@ const SELECTORS = {
   editBox: 'textarea',
   // Inline islands the browser/CSS already isolates; listed for completeness/JS passes.
   code: 'pre, code, .code-block__code',
-  math: '.katex, .katex-display, mjx-container, math',
+  math: '.katex, .katex-display, mjx-container, .MathJax, math',
   table: 'table',
   // Fenced blocks we test for "is this really code, or mis-fenced RTL text?" (§8.D).
   codeBlock: 'pre',
