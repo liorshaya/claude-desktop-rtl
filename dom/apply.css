@@ -86,6 +86,16 @@ pre[data-rtl-text] code {
   transform: scaleX(-1);
 }
 
+/* §8.F — raw Unicode math RELATIONS (< ≤ ∈ ⊂ …) are mirrored by the browser's own bidi
+ * algorithm in RTL (so "3 < 5" reads "3 > 5"). JS wraps each in <span data-rtl-relation>;
+ * isolating it as an LTR run puts it at an even embedding level, so the browser renders the
+ * UPRIGHT glyph and the operands keep reading order. The code point is untouched. (Brackets
+ * are deliberately NOT wrapped — their RTL mirroring is correct.) */
+[data-rtl-relation] {
+  unicode-bidi: isolate;
+  direction: ltr;
+}
+
 /* Islands wrapped by JS (§3.6) isolate like UBA isolates; nesting works. */
 [data-rtl-island] {
   unicode-bidi: isolate;

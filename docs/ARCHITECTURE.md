@@ -410,8 +410,23 @@ For each: the failure, and our handling. "Smooth" means these all Just Work.
   (regional-indicator pairs) → treat as neutral for base-direction; never split a
   grapheme cluster; ensure stripping leading emoji doesn't consume a following strong
   char's cluster.
-- Brackets that **mirror** in RTL (`()[]{}<>`) → leave to UBA mirroring; don't fight it.
-  Canonical bracket pairs (UAX#9 BD16) resolve together.
+- **Paired brackets** that mirror in RTL (`() [] {} ⟨⟩`, UAX#9 BD16) → **leave to UBA
+  mirroring; don't fight it** — a `(` *should* mirror so it opens toward the RTL reading.
+  These are `Ps`/`Pe`, deliberately excluded from the relation handling below.
+- **Math relation symbols** (`< > ≤ ≥ ≪ ≫ ∈ ∋ ⊂ ⊃ ≺ …`, plus `≠ ≈ ≅`) ARE `Bidi_Mirrored`,
+  so UBA rule L4 renders them mirrored at an RTL level — but unlike brackets that **reverses
+  the meaning**: a Hebrew line `3 < 5` is rendered `3 > 5` (false). The browser does this
+  natively whenever the symbol resolves to an RTL level, which happens when it is flanked by
+  **digits** or Hebrew (UBA rule N1 — numbers act as R), but **not** between two Latin
+  letters (`x ∈ S`, `ℕ ⊂ ℤ` render fine). `engine/relations.js` `isMirroredMathRel`
+  classifies them (`Sm` ∧ `Bidi_Mirrored`; brackets `Ps`/`Pe` and arrows excluded); the DOM
+  wraps each in `<span data-rtl-relation>` which CSS **isolates as LTR**
+  (`unicode-bidi: isolate; direction: ltr`), so the browser draws the upright glyph and the
+  operands keep reading order. **Visual only — the code point is untouched** (copy/Ctrl-F
+  byte-for-byte, §3.6). *(Verified by headless render: isolating the symbol alone reads
+  correctly; isolating the whole run reads backwards.)* Rendered KaTeX/MathJax/code is
+  already LTR-isolated, so it is skipped (`inLtrIsland`) — and its symbols never mirrored
+  anyway, which is exactly the Unicode-vs-KaTeX split.
 - **Arrows** (`→ ← ⇒ ⟶ ➜ …`) are NOT bidi-mirrored by UBA, so they point the wrong way
   in RTL. `engine/arrows.js` `isMirrorArrow` classifies them; inside an RTL block the DOM
   wraps each in `<span data-rtl-arrow>` and CSS flips it with `transform: scaleX(-1)` —

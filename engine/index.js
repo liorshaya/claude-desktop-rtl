@@ -8,6 +8,7 @@ const numbers = require('./numbers.js');
 const detect = require('./detect.js');
 const math = require('./math.js');
 const arrows = require('./arrows.js');
+const relations = require('./relations.js');
 const code = require('./code.js');
 
 const api = {
@@ -38,6 +39,9 @@ const api = {
   isMirrorArrow: arrows.isMirrorArrow,
   hasMirrorArrow: arrows.hasMirrorArrow,
   arrowFlipOffsets: arrows.arrowFlipOffsets,
+  // §8.F math-relation mirroring (UBA mirrors these; we isolate them LTR)
+  isMirroredMathRel: relations.isMirroredMathRel,
+  hasMirroredMathRel: relations.hasMirroredMathRel,
   // §8.D code-fence-vs-prose
   looksLikeCode: code.looksLikeCode,
   codeBlockIsProse: code.codeBlockIsProse,

@@ -15,6 +15,7 @@ const SOURCES = [
   'engine/ranges.js',
   'engine/numbers.js',
   'engine/arrows.js',
+  'engine/relations.js',
   'engine/code.js',
   'engine/detect.js',
   'engine/math.js',

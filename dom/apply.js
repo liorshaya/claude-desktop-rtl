@@ -217,6 +217,58 @@ function splitArrows(node) {
   if (node.parentNode) node.parentNode.replaceChild(frag, node);
 }
 
+// §8.F — raw Unicode math RELATIONS (`< ≤ ∈ ⊂ …`, Bidi_Mirrored) are mirrored by the
+// browser itself in an RTL block (UAX#9 L4), so "3 < 5" reads "3 > 5" — false. Unlike
+// arrows we do NOT flip them; we wrap each in <span data-rtl-relation> which CSS isolates
+// as LTR, so the browser renders the UPRIGHT glyph and the operands keep reading order
+// (verified: symbol-only isolation reads correctly, whole-run isolation reads backwards).
+// The code point is untouched (copy/Ctrl-F intact, §3.6). Rendered KaTeX/MathJax/code are
+// already LTR-isolated, so we skip them (inLtrIsland); brackets are excluded by the engine
+// predicate (their RTL mirroring is correct). Stamped per block; only RTL blocks are walked.
+const RELATIONS_ATTR = 'data-rtl-relations';
+function wrapRelationsInBlock(block) {
+  if (block.getAttribute(RELATIONS_ATTR) === '1') return;
+  block.setAttribute(RELATIONS_ATTR, '1');
+  if (!hasMirroredMathRel(block.textContent || '')) return;
+  if (resolvedDir(proseText(block)) !== 'rtl') return; // only where the block renders RTL
+  const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT, {
+    acceptNode: (n) => {
+      if (!n.nodeValue || !hasMirroredMathRel(n.nodeValue)) return NodeFilter.FILTER_REJECT;
+      const p = n.parentNode;
+      if (p && p.hasAttribute && p.hasAttribute('data-rtl-relation')) return NodeFilter.FILTER_REJECT;
+      if (inLtrIsland(n)) return NodeFilter.FILTER_REJECT; // rendered math/code already LTR
+      return NodeFilter.FILTER_ACCEPT;
+    },
+  });
+  const targets = [];
+  let n;
+  while ((n = walker.nextNode())) targets.push(n);
+  for (let i = 0; i < targets.length; i++) splitRelations(targets[i]);
+}
+
+function splitRelations(node) {
+  const text = node.nodeValue;
+  const frag = document.createDocumentFragment();
+  let buf = '';
+  for (let i = 0; i < text.length; ) {
+    const cp = text.codePointAt(i);
+    const w = cp > 0xffff ? 2 : 1;
+    const ch = text.slice(i, i + w);
+    if (isMirroredMathRel(cp)) {
+      if (buf) { frag.appendChild(document.createTextNode(buf)); buf = ''; }
+      const span = document.createElement('span');
+      span.setAttribute('data-rtl-relation', '');
+      span.textContent = ch; // exact glyph preserved — CSS isolates LTR so it renders upright
+      frag.appendChild(span);
+    } else {
+      buf += ch;
+    }
+    i += w;
+  }
+  if (buf) frag.appendChild(document.createTextNode(buf));
+  if (node.parentNode) node.parentNode.replaceChild(frag, node);
+}
+
 // §6 — blocks whose DECORATION depends on direction (list marker/indent, blockquote bar)
 // ALWAYS get an explicit dir, placed on the side the content ACTUALLY renders to. That side
 // is `resolvedDir` (plaintext first-strong, or our override) — NOT `detectBlockDir`, which
@@ -308,7 +360,10 @@ function processRoot(root) {
   const codeBlocks = findCodeBlocks(root);
   for (let i = 0; i < codeBlocks.length && i < MAX_NODES_PER_PASS; i++) processCodeBlock(codeBlocks[i]);
   const leaves = findLeafBlocks(root);
-  for (let i = 0; i < leaves.length && i < MAX_NODES_PER_PASS; i++) wrapArrowsInBlock(leaves[i]);
+  for (let i = 0; i < leaves.length && i < MAX_NODES_PER_PASS; i++) {
+    wrapArrowsInBlock(leaves[i]);
+    wrapRelationsInBlock(leaves[i]);
+  }
   if (ENABLE_ISLANDS) wrapBareIslands(root); // eslint-disable-line no-use-before-define
   sweepInputs(root);
 }
