@@ -29,6 +29,13 @@ const SELECTORS = {
   // Blocks with a direction-dependent DECORATION (list markers/indent, blockquote bar)
   // get an explicit dir so the decoration lands on the content's side (§6).
   dirBlock: 'ul, ol, li, blockquote',
+  // Any editable INPUT host: the chat composer AND the in-place message-EDIT box (both
+  // reuse a ProseMirror contenteditable; textarea kept for safety). Content-mutation
+  // passes must NEVER run inside one — ProseMirror reconciles its OWN DOM, so wrapping a
+  // signed number / arrow or flipping a list's dir there desyncs the editor and FREEZES
+  // typing (the "-5" composer bug). The ONLY thing we ever set on these is dir="auto"
+  // (sweepInputs, §5/§6).
+  editableHost: '[contenteditable="true"], [contenteditable=""], .ProseMirror, textarea',
   // Headings/paragraphs where CSS `plaintext` first-strong can misfire on a Latin/marker
   // opener of a Hebrew block ("8c. בדיקה…", "React הוא…"); we override only then (§3.2/§8.K).
   proseDir: 'p, h1, h2, h3, h4, h5, h6',

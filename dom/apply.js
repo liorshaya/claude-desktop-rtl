@@ -68,6 +68,15 @@ function sweepInputs(root) {
   for (let i = 0; i < inputs.length; i++) setInputDir(inputs[i]);
 }
 
+// True if `el` is (or is inside) an editable INPUT host — the composer or the in-place
+// message-edit box (SELECTORS.editableHost). Every content-mutation pass bails on these:
+// ProseMirror manages its own DOM, so wrapping a signed number / arrow or stamping dir on
+// a block there desyncs the editor and FREEZES typing (e.g. a Hebrew line with "-5"). We
+// only ever set dir="auto" on inputs (setInputDir/sweepInputs). (§5/§6)
+function inEditable(el) {
+  return !!(el && el.closest && el.closest(SELECTORS.editableHost));
+}
+
 // Apply dir="auto" to a freshly-added node and any inputs inside it. Called synchronously
 // from the observer so an edit box is dir="auto" BEFORE its first paint — no visible
 // LTR→RTL flip. dir="auto" is live, so even a box that mounts empty then fills with
@@ -107,6 +116,7 @@ function processAdded(node) {
 // DONE_ATTR.
 function processTable(table) {
   if (table.getAttribute(DONE_ATTR)) return;
+  if (inEditable(table)) return; // a table being edited in the composer/edit box → don't touch
   if (table.closest('pre, code')) return; // a table inside a source/code view stays LTR
   const shape = readTableShape(table);
   if (tableDir(shape.allCells, shape.headers) === 'rtl') table.setAttribute('dir', 'rtl');
@@ -157,6 +167,7 @@ function alignColumns(table) {
 // untouched — the engine's codeBlockIsProse is conservative (any code structure → code).
 function processCodeBlock(pre) {
   if (pre.getAttribute(DONE_ATTR)) return;
+  if (inEditable(pre)) return; // a fenced block being typed in the composer/edit box → leave it
   if (codeBlockIsProse(pre.textContent || '')) pre.setAttribute('data-rtl-text', '');
   pre.setAttribute(DONE_ATTR, '1');
 }
@@ -189,6 +200,7 @@ function inLtrIsland(node) {
 }
 
 function wrapArrowsInBlock(block) {
+  if (inEditable(block)) return; // never mutate the composer / edit box (freezes typing)
   if (block.getAttribute(ARROWS_ATTR) === '1') return;
   block.setAttribute(ARROWS_ATTR, '1');
   if (!hasMirrorArrow(block.textContent || '')) return;
@@ -261,7 +273,7 @@ function wrapRelationsUnder(root) {
       const p = n.parentNode;
       if (p && p.hasAttribute && p.hasAttribute('data-rtl-relation')) return NodeFilter.FILTER_REJECT;
       if (inLtrIsland(n)) return NodeFilter.FILTER_REJECT; // rendered math/code already LTR
-      if (p && p.closest && p.closest('pre, code, [contenteditable="true"], .ProseMirror')) {
+      if (p && p.closest && p.closest('pre, code, ' + SELECTORS.editableHost)) {
         return NodeFilter.FILTER_REJECT; // never touch source views or the input box
       }
       return NodeFilter.FILTER_ACCEPT;
@@ -304,6 +316,7 @@ function splitRelations(node) {
 // Skips rendered math/code islands; only RTL blocks are walked; stamped per block.
 const NUMS_ATTR = 'data-rtl-nums';
 function wrapSignedNumbersInBlock(block) {
+  if (inEditable(block)) return; // never mutate the composer / edit box (the "-5" freeze)
   if (block.getAttribute(NUMS_ATTR) === '1') return;
   block.setAttribute(NUMS_ATTR, '1');
   if (!signedNumberRuns(block.textContent || '').length) return;
@@ -356,6 +369,7 @@ function splitSignedNumbers(node) {
 // explicit dir.
 function processDirBlock(el) {
   if (el.getAttribute('dir')) return;
+  if (inEditable(el)) return; // a list/quote being TYPED in the composer → don't stamp dir
   if (el.closest('pre, code')) return; // inside a source/code view → stays LTR
   const t = proseText(el);
   if (plaintextOverrideDir(t) === 'rtl' && el.matches && el.matches('li, blockquote')) {
@@ -439,6 +453,7 @@ function applyCellRtlOverride(cell) {
 function processProseDir(el) {
   if (el.getAttribute('data-rtl-dir')) return; // already overridden by us
   if (el.getAttribute('dir')) return; // respect an explicit dir we didn't set
+  if (inEditable(el)) return; // a paragraph being TYPED in the composer → leave it alone
   if (el.closest('pre, code')) return; // source/code view → stays LTR
   if (el.closest('table')) return; // table cells get §8.K via overrideCellDirs (no text-align)
   if (plaintextOverrideDir(proseText(el)) === 'rtl') applyRtlOverride(el);
@@ -446,6 +461,13 @@ function processProseDir(el) {
 
 function processRoot(root) {
   if (!root) return;
+  // The composer / in-place edit box is an INPUT surface (§5/§6): the only thing we touch
+  // on it is dir="auto" (sweepInputs). When the observer scopes a pass INTO an editable —
+  // the common case while typing, where `root` is the composer subtree — skip every content
+  // pass. Mutating ProseMirror's managed DOM (a signed-number/arrow wrap, a list dir flip)
+  // desyncs it and FREEZES typing. Editing a message in place scopes `root` to the message
+  // root instead (not editable here), so the per-pass inEditable guards catch that case.
+  if (inEditable(root)) { sweepInputs(root); return; }
   const tables = findTables(root);
   for (let i = 0; i < tables.length && i < MAX_NODES_PER_PASS; i++) processTable(tables[i]);
   const dirBlocks = findDirBlocks(root);

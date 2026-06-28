@@ -81,7 +81,7 @@ function writeDist() {
 }
 
 // __EXPORTS__ (build helper is node-only; not part of any payload)
-const api = { buildPayload, writeDist, MARKER, SOURCES };
+const api = { buildPayload, writeDist, stripModule, MARKER, SOURCES };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 
 if (require.main === module) {

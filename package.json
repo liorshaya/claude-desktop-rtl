@@ -6,7 +6,7 @@
   "license": "MIT",
   "type": "commonjs",
   "scripts": {
-    "test": "node --test engine/__tests__/*.test.js build/__tests__/*.test.js",
+    "test": "node --test engine/__tests__/*.test.js dom/__tests__/*.test.js build/__tests__/*.test.js",
     "build": "node build/build-payload.js"
   }
 }
