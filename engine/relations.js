@@ -43,21 +43,22 @@ function hasMirroredMathRel(str) {
 function hasMathRun(str) {
   if (!str) return false;
   let op = false;
-  let dig = false;
+  let weak = false;
   let bracket = false;
   let comma = false;
   for (const ch of str) {
     const cp = ch.codePointAt(0);
     if (isMirroredMathRel(cp)) return true;
     if (isPrefixOp(cp)) return true; // a prefix op (√ ∑ ∀ ¬ …) is an unambiguous math signal
-    if (isArithOp(cp)) op = true;
-    else if ((cp >= 0x30 && cp <= 0x39) || (cp >= 0x660 && cp <= 0x669) || (cp >= 0x6f0 && cp <= 0x6f9)) dig = true;
+    if (isArithOp(cp) || isSetOp(cp)) op = true;
+    else if ((cp >= 0x30 && cp <= 0x39) || (cp >= 0x660 && cp <= 0x669) || (cp >= 0x6f0 && cp <= 0x6f9)) weak = true; // digit
+    else if (cp === 0x2205 || cp === 0x22a4 || cp === 0x22a5) weak = true; // ∅ ⊤ ⊥
     if (cp === 0x5b || cp === 0x28 || cp === 0x7b || cp === 0x27e8) bracket = true; // [ ( { ⟨
     else if (cp === 0x2c) comma = true; // ,
-    // arithmetic over digits ("15 + 7 = 22") OR a bracket group with a comma/operator ("[a, b]",
-    // "(0, 1)", "(a + b)²"). All over-approximations — relationRuns makes the precise call (and
-    // returns [] for prose), so a loose gate only costs an extra parse, never correctness.
-    if ((op && dig) || (bracket && (comma || op))) return true;
+    // an arith/set op over a weak operand ("15 + 7 = 22", "A ∩ B = ∅") OR a bracket group with a
+    // comma/operator ("[a, b]", "(a + b)²", "(a, b] ∪ [c, d)"). All over-approximations — relationRuns
+    // makes the precise call (and returns [] for prose), so a loose gate only costs an extra parse.
+    if ((op && weak) || (bracket && (comma || op))) return true;
   }
   return false;
 }
@@ -87,6 +88,7 @@ function isTermChar(ch) {
   if (c === 0xb2 || c === 0xb3 || c === 0xb9) return true; // ² ³ ¹ (Latin-1 superscripts)
   if (c >= 0x2070 && c <= 0x209f) return true;             // super/subscripts (x² aₙ x⁻¹ 2³ …)
   if (c === 0x221e) return true;                           // ∞ (a value: "x ≤ ∞", "(0, ∞)")
+  if (c === 0x2205) return true;                           // ∅ (empty set: "A ∩ B = ∅")
   return false; // NB: '.' is handled by the scanners as a decimal only BETWEEN term chars,
                 // so a sentence-final period ("7 > 2.") is not swallowed into the operand.
 }
@@ -120,11 +122,22 @@ function isArithOp(cp) {
     cp === 0x2217 /* ∗ */ || cp === 0x22c5 /* ⋅ */ || cp === 0xb1 /* ± */ || cp === 0x2213 /* ∓ */ ||
     cp === 0x2a /* * */ || cp === 0x2f /* / */;
 }
-// A connector that may CHAIN terms inside one expression: any mirror relation OR arithmetic
+// BINARY set operators ∩ ∪ ∖ ⊎ ⊓ ⊔ — symmetric (NOT Bidi_Mirrored), but they chain set operands
+// and, like arithmetic, an all-weak run reorders ("A ∩ B = ∅" → "∅ = B ∩ A"). They seed/chain only
+// when the run also carries something that reorders (a bracket / digit / ∅ / prefix), so a bare,
+// letter-anchored "A ∪ B" (which renders fine) is left alone.
+function isSetOp(cp) {
+  return cp === 0x2229 /* ∩ */ || cp === 0x222a /* ∪ */ || cp === 0x2216 /* ∖ */ ||
+    cp === 0x228e /* ⊎ */ || cp === 0x2293 /* ⊓ */ || cp === 0x2294 /* ⊔ */;
+}
+// A connector that may CHAIN terms inside one expression: any mirror relation OR arithmetic OR set
 // operator. Tag `< >` are filtered by the caller via inTag.
 function isConnectorCp(cp) {
-  return isArithOp(cp) || isMirroredMathRel(cp);
+  return isArithOp(cp) || isSetOp(cp) || isMirroredMathRel(cp);
 }
+// A "weak nullary" math value that reorders in RTL on its own (like a digit): ∅ ⊤ ⊥. Used to gate
+// an arithmetic/set run that has no digit/bracket but still scrambles ("A ∩ B = ∅").
+const WEAKVAL_RE = /[∅⊤⊥]/;
 // PREFIX math operators: a symbol whose operand is on the RIGHT — roots √∛∜, big operators
 // ∑∏∐∫∮… (sum/product/integral), quantifiers ∀∃∄, logical-not ¬, differential ∇∂, and the
 // n-ary logical/set/operators ⋀⋁⋂⋃ ⨀…⨉. In an RTL line the symbol is neutral and the UBA places
@@ -152,8 +165,8 @@ const STRONG_RTL_RE = /[\u0590-\u08ff\ufb1d-\ufdff\ufe70-\ufefc]/;
 // A prose word inside brackets: ≥3 consecutive Latin letters ("(see note)") — distinguishes prose
 // from math variables (1–2 letters: "(a, b)") and numbers, so prose parentheticals stay untouched.
 const WORD3_RE = /[A-Za-z]{3,}/;
-const OPENERS = '([{\u27e8';   // ( [ { ⟨
-const CLOSERS = ')]}\u27e9';   // ) ] } ⟩
+const OPENERS = '([{\u27e8\u230a\u2308\u27e6';   // ( [ { ⟨ ⌊(floor) ⌈(ceil) ⟦
+const CLOSERS = ')]}\u27e9\u230b\u2309\u27e7';   // ) ] } ⟩ ⌋ ⌉ ⟧
 
 // The maximal comparison AND arithmetic EXPRESSIONS to ISOLATE in `text`, as UTF-16 [start, end)
 // ranges. Seeds are every mirror-relation char (except a `<`/`>` of an HTML tag) and every BINARY
@@ -426,12 +439,14 @@ function relationRuns(text) {
         while (s > 0 && isTermChar(ch(s - 1))) s -= 1; // a leading function name: "f(x, y)"
         runs.push([s, e]);
       }
-    } else if (isArithOp(cp)) {
-      // An arithmetic operator seeds ONLY as a BINARY op (operands on both sides) whose run holds a
-      // digit OR a prefix op — the all-weak case that reorders ("15 + 7 = 22", "c = √x"). A leading
-      // SIGN (+ - − at a word boundary, immediately before a digit: "-5", "low -40°C") is NOT binary
-      // — it belongs to its number, so it is skipped here (signedNumberRuns owns it). A letters-only
-      // run with no prefix ("well-known", "a = b") never reorders.
+    } else if (isArithOp(cp) || isSetOp(cp)) {
+      // An arithmetic/set operator seeds ONLY as a BINARY op (operands on both sides) whose run holds
+      // something that REORDERS: a digit ("15 + 7 = 22"), a prefix op ("c = √x"), a weak value ∅
+      // ("A ∩ B = ∅"), or a math bracket — a "(…)"/"[…]" with an operator/comma inside, which itself
+      // scrambles ("(a+b)² = c" reads "c = (a+b)²", "(a, b] ∪ [c, d)" reverses). A leading SIGN (+ - −
+      // at a word boundary before a digit: "-5", "low -40°C") is NOT binary — it belongs to its
+      // number (signedNumberRuns owns it). A bare letter-anchored run ("a = b", "A ∪ B") never
+      // reorders and stays out.
       const c = text[i];
       const sign = (c === '+' || c === '-' || c === '−')
         && (i === 0 || !LETTER_OR_NUMBER.test(text[i - 1])) && DIGITS.test(text[i + w] || '');
@@ -439,13 +454,9 @@ function relationRuns(text) {
         const s = expandLeft(i);
         const e = expandRight(i + w);
         const slice = text.slice(s, e);
-        // isolate an arithmetic run that carries something which REORDERS: a digit ("15 + 7 = 22"),
-        // a prefix op ("c = √x"), or a math bracket — a "(…)"/"[…]" with an operator/comma inside,
-        // which itself scrambles ("(a+b)² = c" reads "c = (a+b)²" otherwise). A plain function call
-        // "f(x) = y" has no such bracket and is letter-anchored, so it stays out.
         let hasMB = false;
         for (let p = s; p < e && !hasMB; p++) if (OPENERS.indexOf(ch(p)) !== -1 && mathBracketEnd(p) > p) hasMB = true;
-        if (s < i && e > i + w && (DIGITS.test(slice) || PREFIX_RE.test(slice) || hasMB)) runs.push([s, e]);
+        if (s < i && e > i + w && (DIGITS.test(slice) || PREFIX_RE.test(slice) || WEAKVAL_RE.test(slice) || hasMB)) runs.push([s, e]);
       }
     }
     i += w;
