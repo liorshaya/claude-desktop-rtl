@@ -212,6 +212,45 @@ function relationRuns(text) {
     }
     return open;
   }
+  // A sub/superscript decoration "^ARG" / "_ARG" — its argument is a braced/paren group "{i=1}",
+  // "(n+1)", an optionally-signed term "2", "-1", "ij", or a single char. Returns the index past the
+  // argument, or i if `i` is not at a "^"/"_" with a consumable argument. Powers literal LaTeX
+  // sub/superscripts ("∑_{i=1}^{n}", "x^{2}", "a_{ij}", "∫_0^1") on top of the precomposed forms (x²).
+  function scriptArgEnd(i) {
+    if (ch(i) !== '^' && ch(i) !== '_') return i;
+    let j = i + 1;
+    if (j >= len) return i;
+    if (OPENERS.indexOf(ch(j)) !== -1) { const c = bracketSpanEnd(j); return c > j ? c : i; } // _{…}
+    if (isSign(ch(j))) j += 1;            // ^-1
+    const b0 = j;
+    while (j < len && isTermChar(ch(j))) j += 1; // ^2, _ij, ^10
+    return j > b0 ? j : i;
+  }
+
+  // Absolute-value / norm bars |…|. The bar is the SAME glyph open & close, so pair the bars that
+  // are NOT inside a bracket group, sequentially (1st-2nd, 3rd-4th, …); keep a pair only if its
+  // content is math-ish (no RTL prose, no ≥3-letter Latin word). A "|" inside parens/braces is left
+  // to that group (conditional probability "P(A | B)", set-builder "{x | x>0}"). These act like a
+  // bracket operand so "|x − 3| < 5" and "|x| + 1 < 5" and "|f(x) − f(a)| < δ" isolate whole.
+  const absSpans = [];
+  {
+    let depth = 0;
+    const bars = [];
+    for (let j = 0; j < len; j++) {
+      const c = ch(j);
+      if (OPENERS.indexOf(c) !== -1) depth += 1;
+      else if (CLOSERS.indexOf(c) !== -1) { if (depth > 0) depth -= 1; }
+      else if (c === '|' && depth === 0) bars.push(j);
+    }
+    for (let b = 0; b + 1 < bars.length; b += 2) {
+      const o = bars[b];
+      const c = bars[b + 1];
+      const inner = text.slice(o + 1, c);
+      if (inner.trim() && !STRONG_RTL_RE.test(inner) && !WORD3_RE.test(inner)) absSpans.push([o, c + 1]);
+    }
+  }
+  const absOpenEnd = (i) => { for (let k = 0; k < absSpans.length; k++) if (absSpans[k][0] === i) return absSpans[k][1]; return -1; };
+  const absCloseStart = (i) => { for (let k = 0; k < absSpans.length; k++) if (absSpans[k][1] - 1 === i) return absSpans[k][0]; return -1; };
 
   // Start index of the TERM ending at `end` (exclusive), '' if none. Attaches a leading sign
   // when the term is a number and the sign sits at a word boundary (not after a letter/number).
@@ -222,12 +261,19 @@ function relationRuns(text) {
   function termStartLeft(end) {
     let i = end;
     while (i > 0 && isSuffix(ch(i - 1))) i -= 1; // trailing suffix(es): 50%, 10°, 5₪
+    // a |…| absolute-value / norm group ending here is ONE operand: "|x − 3|", "|f(x) − f(a)|"
+    if (i > 0) { const s = absCloseStart(i - 1); if (s >= 0) return s; }
     // a bracket group / function-call args ending here is ONE operand: "(3 × 5)", "[a, b]", "f(x)"
     if (i > 0 && CLOSERS.indexOf(ch(i - 1)) !== -1) {
       const open = bracketSpanLeft(i - 1);
       if (open < i - 1) {
         let s = open;
-        while (s > 0 && isTermChar(ch(s - 1))) s -= 1; // a leading function-call name: f(x), sin(θ)
+        // a leading function-call name (f(x), sin(θ)) OR a script base (x^{2}, a_{ij})
+        for (;;) {
+          if (s > 0 && isTermChar(ch(s - 1))) { s -= 1; continue; }
+          if (s > 1 && (ch(s - 1) === '^' || ch(s - 1) === '_') && isTermChar(ch(s - 2))) { s -= 2; continue; }
+          break;
+        }
         return s;
       }
     }
@@ -268,8 +314,21 @@ function relationRuns(text) {
       }
       if (k > i) { const e = termEndRight(k); return e > k ? e : start; } // prefix + operand, else none
     }
+    // a LEADING sub/superscript decoration is a big-operator's limits ("∑_{i=1}^{n} i²", "∫_0^1 f"):
+    // consume the script chain, then (across an optional space) the summand/integrand it acts on.
+    if (ch(i) === '^' || ch(i) === '_') {
+      let k = i;
+      for (;;) { const e = scriptArgEnd(k); if (e > k) k = e; else break; }
+      if (k > i) {
+        let j = k;
+        while (j < len && isWS(ch(j))) j += 1;
+        const body = termEndRight(j);
+        return body > j ? body : k;
+      }
+    }
     if (isSign(ch(i)) && i + 1 < len && (isDigitCh(ch(i + 1)) || isCurrency(ch(i + 1)))) i += 1; // -5, -$5
     if (isCurrency(ch(i))) i += 1; // leading currency: $5
+    { const e = absOpenEnd(i); if (e > i) { i = e; while (i < len && isSuffix(ch(i))) i += 1; return i; } } // |x − 3|
     // a bracket group is ONE operand: "(3 × 5)", "(a + b)", "[a, b]", "{1, 2}"
     if (OPENERS.indexOf(ch(i)) !== -1) {
       const close = bracketSpanEnd(i);
@@ -285,9 +344,10 @@ function relationRuns(text) {
       if (i > body0 && isSep(ch(i)) && isDigitCh(ch(i - 1)) && i + 1 < len && isDigitCh(ch(i + 1))) {
         i += 1; continue;
       }
-      // ° (unit), ^ (exponent), _ (subscript) bind two term chars into ONE operand (25°C, 2^3,
-      // x_i); ° may also cross one SI space (25 °C).
-      if (i > body0 && (ch(i) === '°' || ch(i) === '^' || ch(i) === '_') && i + 1 < len && isTermChar(ch(i + 1))) { i += 1; continue; }
+      // ° binds a unit letter (25°C, also across one SI space "25 °C"); ^ _ bind a sub/superscript
+      // — a single char (2^3, x_i) OR a braced/paren group (x^{2}, a_{ij}) via scriptArgEnd.
+      if (i > body0 && ch(i) === '°' && i + 1 < len && isTermChar(ch(i + 1))) { i += 1; continue; }
+      if (i > body0 && (ch(i) === '^' || ch(i) === '_')) { const e = scriptArgEnd(i); if (e > i) { i = e; continue; } }
       if (i > body0 && ch(i) === ' ' && ch(i + 1) === '°' && i + 2 < len && isTermChar(ch(i + 2))) {
         i += 1; continue;
       }
@@ -374,6 +434,19 @@ function relationRuns(text) {
       }
     }
     i += w;
+  }
+  // A STANDALONE absolute value whose content reorders ("|x − 3|", "|f(x) − f(a)|"): seed the whole
+  // |…| group (with a relation/operator around it, the relation seed already grew to include it via
+  // termStart/EndLeft, and these merge). A bare "|x|" carries no signal and is left alone.
+  for (let s = 0; s < absSpans.length; s++) {
+    const o = absSpans[s][0];
+    const c = absSpans[s][1];
+    let sig = false;
+    for (let j = o + 1; j < c - 1; j++) {
+      const pc = text.codePointAt(j);
+      if (DIGITS.test(text[j]) || isConnectorCp(pc) || isPrefixOp(pc) || pc === 0x2c) { sig = true; break; }
+    }
+    if (sig) runs.push([expandLeft(o), expandRight(c)]);
   }
   if (!runs.length) return out;
 
