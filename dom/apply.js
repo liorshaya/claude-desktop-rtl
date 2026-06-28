@@ -251,10 +251,10 @@ function splitArrows(node) {
 // data-rtl-relation span is left alone, so re-walks during streaming are safe.
 function wrapRelationsUnder(root) {
   if (!root || root.nodeType !== 1) return;
-  if (!hasMirroredMathRel(root.textContent || '')) return;
+  if (!hasMathRun(root.textContent || '')) return; // comparison OR numeric arithmetic
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
     acceptNode: (n) => {
-      if (!n.nodeValue || !hasMirroredMathRel(n.nodeValue)) return NodeFilter.FILTER_REJECT;
+      if (!n.nodeValue || !hasMathRun(n.nodeValue)) return NodeFilter.FILTER_REJECT;
       const p = n.parentNode;
       if (p && p.hasAttribute && p.hasAttribute('data-rtl-relation')) return NodeFilter.FILTER_REJECT;
       if (inLtrIsland(n)) return NodeFilter.FILTER_REJECT; // rendered math/code already LTR

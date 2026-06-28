@@ -22,6 +22,7 @@
 const SM = /\p{Sm}/u;
 const MIRRORED = /\p{Bidi_Mirrored}/u;
 const LETTER_OR_NUMBER = /[\p{L}\p{N}]/u;
+const DIGITS = /[0-9٠-٩۰-۹]/; // EN / Arabic-Indic / Persian — gates arithmetic-run isolation
 
 function isMirroredMathRel(cp) {
   const ch = String.fromCodePoint(cp);
@@ -31,6 +32,24 @@ function isMirroredMathRel(cp) {
 function hasMirroredMathRel(str) {
   for (const ch of str) {
     if (isMirroredMathRel(ch.codePointAt(0))) return true;
+  }
+  return false;
+}
+
+// Fast over-approximation: could `str` hold a run that relationRuns would isolate? True for any
+// mirror relation (a comparison mirrors regardless of operands), or an arithmetic operator
+// together with a digit (the all-weak case that reorders, "15 + 7 = 22"). Used by the DOM as a
+// cheap gate before the full parse. Short-circuits.
+function hasMathRun(str) {
+  if (!str) return false;
+  let op = false;
+  let dig = false;
+  for (const ch of str) {
+    const cp = ch.codePointAt(0);
+    if (isMirroredMathRel(cp)) return true;
+    if (isArithOp(cp)) op = true;
+    else if ((cp >= 0x30 && cp <= 0x39) || (cp >= 0x660 && cp <= 0x669) || (cp >= 0x6f0 && cp <= 0x6f9)) dig = true;
+    if (op && dig) return true;
   }
   return false;
 }
@@ -76,17 +95,27 @@ function isSuffix(ch) { return ch === '%' || ch === '°' || isCurrency(ch); } //
 // '.'/',' are number-internal separators (3.14, 1,000) — counted ONLY between two digits, so a
 // sentence period ("2.") and a list comma ("x, y") never join an operand.
 function isSep(ch) { return ch === '.' || ch === ','; }
-// A connector that may CHAIN terms inside one expression: any mirror relation, plus the
-// symmetric comparators `=` and `≠` (not Bidi_Mirrored, so never a seed on their own, but they
-// belong in a chain like "0 ≤ x = 4"). Tag `< >` are filtered by the caller via inTag.
+// ARITHMETIC operators: + - − × ÷ = · ∗ ⋅ ± ∓ * / . NOT Bidi_Mirrored (their glyphs are fine in
+// RTL), but they still REORDER weak number operands — "15 + 7 = 22" renders "22 = 7 + 15" in an
+// RTL paragraph because the digits are weak. So an all-number arithmetic run must be isolated LTR
+// just like a comparison. These also CHAIN operands inside an expression ("15 + 7 = 22").
+function isArithOp(cp) {
+  return cp === 0x2b /* + */ || cp === 0x2d /* - */ || cp === 0x2212 /* − */ ||
+    cp === 0xd7 /* × */ || cp === 0xf7 /* ÷ */ || cp === 0x3d /* = */ || cp === 0xb7 /* · */ ||
+    cp === 0x2217 /* ∗ */ || cp === 0x22c5 /* ⋅ */ || cp === 0xb1 /* ± */ || cp === 0x2213 /* ∓ */ ||
+    cp === 0x2a /* * */ || cp === 0x2f /* / */;
+}
+// A connector that may CHAIN terms inside one expression: any mirror relation OR arithmetic
+// operator. Tag `< >` are filtered by the caller via inTag.
 function isConnectorCp(cp) {
-  return cp === 0x3d /* = */ || isMirroredMathRel(cp);
+  return isArithOp(cp) || isMirroredMathRel(cp);
 }
 
-// The maximal comparison EXPRESSIONS to ISOLATE in `text`, as UTF-16 [start, end) ranges.
-// Each mirror-relation char (a "seed"), except a `<`/`>` that belongs to an HTML tag, is grown
-// LEFT and RIGHT over `(WS? TERM)(WS? CONNECTOR WS? TERM)*` — so a whole chain "0 < x ≤ 4"
-// becomes one run; a lone relation with no operand on either side (e.g. "הסימן < מציין")
+// The maximal comparison AND arithmetic EXPRESSIONS to ISOLATE in `text`, as UTF-16 [start, end)
+// ranges. Seeds are every mirror-relation char (except a `<`/`>` of an HTML tag) and every BINARY
+// arithmetic operator over a numeric run ("15 + 7 = 22" reorders in RTL too); each is grown LEFT
+// and RIGHT over `(WS? TERM)(WS? CONNECTOR WS? TERM)*` — so a whole chain "0 < x ≤ 4" or
+// "15 + 7 = 22" becomes one run; a lone relation with no operand on either side (e.g. "הסימן < מציין")
 // stays a single char. Overlapping/adjacent runs (the seeds of one chain) are merged. A leading
 // sign is pulled into a numeric operand ("-5 < x" → the run starts at the "-") only at a word
 // boundary, exactly as numbers.signedNumberRuns decides, so the sign renders with its number.
@@ -124,10 +153,11 @@ function relationRuns(text) {
       if (i > 1 && i < bodyEnd && isSep(ch(i - 1)) && isDigitCh(ch(i - 2)) && isDigitCh(ch(i))) {
         i -= 1; continue;
       }
-      // a degree joins a number to its unit, possibly across one SI space (25°C, 25 °C, 98.6°F)
-      if (i < bodyEnd && ch(i - 1) === '°' && isTermChar(ch(i))) {
-        if (i > 1 && isTermChar(ch(i - 2))) { i -= 1; continue; }                     // 25°C
-        if (i > 2 && ch(i - 2) === ' ' && isTermChar(ch(i - 3))) { i -= 2; continue; } // 25 °C
+      // ° (unit), ^ (exponent), _ (subscript) bind two term chars into ONE operand (25°C, 2^3,
+      // x_i); ° may also cross one SI space (25 °C).
+      if (i < bodyEnd && (ch(i - 1) === '°' || ch(i - 1) === '^' || ch(i - 1) === '_') && isTermChar(ch(i))) {
+        if (i > 1 && isTermChar(ch(i - 2))) { i -= 1; continue; }                       // 25°C / 2^3
+        if (ch(i - 1) === '°' && i > 2 && ch(i - 2) === ' ' && isTermChar(ch(i - 3))) { i -= 2; continue; } // 25 °C
       }
       break;
     }
@@ -150,8 +180,9 @@ function relationRuns(text) {
       if (i > body0 && isSep(ch(i)) && isDigitCh(ch(i - 1)) && i + 1 < len && isDigitCh(ch(i + 1))) {
         i += 1; continue;
       }
-      // a degree joins a number to its unit, possibly across one SI space (25°C, 25 °C, 98.6°F)
-      if (i > body0 && ch(i) === '°' && i + 1 < len && isTermChar(ch(i + 1))) { i += 1; continue; }
+      // ° (unit), ^ (exponent), _ (subscript) bind two term chars into ONE operand (25°C, 2^3,
+      // x_i); ° may also cross one SI space (25 °C).
+      if (i > body0 && (ch(i) === '°' || ch(i) === '^' || ch(i) === '_') && i + 1 < len && isTermChar(ch(i + 1))) { i += 1; continue; }
       if (i > body0 && ch(i) === ' ' && ch(i + 1) === '°' && i + 2 < len && isTermChar(ch(i + 2))) {
         i += 1; continue;
       }
@@ -197,7 +228,8 @@ function relationRuns(text) {
     return runEnd;
   }
 
-  // Seed at every mirror-relation char (skip tag brackets), grow to the whole expression.
+  // Seed at every mirror-relation (skip tag brackets) and every BINARY arithmetic operator;
+  // grow each to the whole expression.
   const runs = [];
   for (let i = 0; i < len; ) {
     const cp = text.codePointAt(i);
@@ -205,6 +237,20 @@ function relationRuns(text) {
     if (isMirroredMathRel(cp)) {
       const c = text[i];
       if (!((c === '<' || c === '>') && inTag(i))) runs.push([expandLeft(i), expandRight(i + w)]);
+    } else if (isArithOp(cp)) {
+      // An arithmetic operator seeds ONLY as a BINARY op (operands on both sides) whose run holds
+      // a digit — the all-weak case that reorders ("15 + 7 = 22"). A leading SIGN (+ - − at a word
+      // boundary, immediately before a digit: "-5", "low -40°C") is NOT binary — it belongs to its
+      // number, so it is skipped here (the operand scanner / signedNumberRuns own it). A
+      // letters-only run ("well-known", "a = b") carries no digit and never reorders.
+      const c = text[i];
+      const sign = (c === '+' || c === '-' || c === '−')
+        && (i === 0 || !LETTER_OR_NUMBER.test(text[i - 1])) && DIGITS.test(text[i + w] || '');
+      if (!sign) {
+        const s = expandLeft(i);
+        const e = expandRight(i + w);
+        if (s < i && e > i + w && DIGITS.test(text.slice(s, e))) runs.push([s, e]);
+      }
     }
     i += w;
   }
@@ -222,5 +268,5 @@ function relationRuns(text) {
 }
 
 // __EXPORTS__ (everything below is stripped when inlined into the browser payload)
-const api = { isMirroredMathRel, hasMirroredMathRel, relationRuns };
+const api = { isMirroredMathRel, hasMirroredMathRel, hasMathRun, relationRuns };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;

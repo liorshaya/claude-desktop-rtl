@@ -136,12 +136,12 @@ test('operands: chained comparisons & mixed operators', () => {
   assert.deepEqual(runs('0 < a ≤ b < c ≤ 9'), ['0 < a ≤ b < c ≤ 9']);
 });
 
-test('operands: KNOWN LIMIT — an operand that is several space-separated tokens is not one unit', () => {
-  // A single operand spanning a SPACE (a function application like "cos θ", or "n + 1") is out of
-  // scope: each side of a relation is a single token, so the run splits at the space. Documented
-  // so the behaviour is locked; in practice such math arrives as KaTeX (an LTR island) anyway.
+test('operands: KNOWN LIMIT — a space-separated multi-token operand ("cos θ") still splits', () => {
+  // A single operand spanning a SPACE with no operator (a function application like "cos θ") is
+  // out of scope: each side of a relation is one token, so the run splits at the space. (An
+  // ARITHMETIC join like "n + 1" IS pulled in now — see the arithmetic tests.)
   assert.deepEqual(runs('-1 ≤ cos θ ≤ 1'), ['-1 ≤ cos', 'θ ≤ 1']);
-  assert.deepEqual(runs('0 < n + 1'), ['0 < n']); // "+ 1" is not pulled into the right operand
+  assert.deepEqual(runs('0 < n + 1'), ['0 < n + 1']); // "+ 1" chains in via the arithmetic operator
 });
 
 // ─────────────────────────────── mixed operand types ───────────────────────────────
@@ -199,14 +199,15 @@ test('operands: a relation with no operand on a side stays minimal', () => {
 });
 
 // ─────────────────────────────── things that must NOT trigger ───────────────────────────────
-test('operands: non-comparisons are never isolated', () => {
-  assert.deepEqual(runs('f(3) = 5'), []);          // `=` alone is not a mirrored seed
-  assert.deepEqual(runs('n ≡ 0 (mod 2)'), []);     // ≡ is symmetric (not Bidi_Mirrored)
+test('operands: brackets / arrows / prose are not isolated, but numeric arithmetic IS', () => {
+  assert.deepEqual(runs('f(3) = 5'), []);          // ")" blocks the left operand of "="
+  assert.deepEqual(runs('n ≡ 0 (mod 2)'), []);     // ≡ is symmetric — not an operator we seed
   assert.deepEqual(runs('[a] {b} (c)'), []);        // brackets only
   assert.deepEqual(runs('a → b ⇒ c'), []);          // arrows (handled elsewhere)
-  assert.deepEqual(runs('2 + 3 × 4'), []);          // arithmetic ops, no relation
   assert.deepEqual(runs('שלום עולם'), []);
-  assert.deepEqual(runs('5-10 מעלות'), []);          // a numeric RANGE has no relation char
+  // numeric arithmetic DOES reorder in RTL, so it is isolated LTR like a comparison
+  assert.deepEqual(runs('2 + 3 × 4'), ['2 + 3 × 4']);
+  assert.deepEqual(runs('טווח 5-10 מעלות'), ['5-10']); // a numeric range reorders → isolated
 });
 
 // ─────────────────────────────── HTML tags stay excluded ───────────────────────────────

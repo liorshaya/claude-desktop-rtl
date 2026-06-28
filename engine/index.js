@@ -44,6 +44,7 @@ const api = {
   // whole comparison expression LTR so glyphs stay upright and operands keep reading order)
   isMirroredMathRel: relations.isMirroredMathRel,
   hasMirroredMathRel: relations.hasMirroredMathRel,
+  hasMathRun: relations.hasMathRun,
   relationRuns: relations.relationRuns,
   // §8.D code-fence-vs-prose
   looksLikeCode: code.looksLikeCode,

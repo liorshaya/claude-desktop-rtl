@@ -77,9 +77,9 @@ test('mixed: KNOWN LIMITS — function-call parens and space-separated operands'
   // A parenthesised function argument is not pulled into the operand (parens are left to UBA,
   // which mirrors them correctly); only the bare relation + adjacent token isolate.
   assert.deepEqual(runs('f(x) ≤ g(x)'), ['≤ g']);
-  // A single operand spanning a SPACE (a function application, "n + 1") splits at the space.
+  // a function application spanning a SPACE ("cos θ") still splits at the space
   assert.deepEqual(runs('-1 ≤ cos θ ≤ 1'), ['-1 ≤ cos', 'θ ≤ 1']);
-  assert.deepEqual(runs('0 < n + 1'), ['0 < n']);
-  // a slash fraction is not one operand (slash is division, not part of the number)
-  assert.deepEqual(runs('1/2 < 3/4'), ['2 < 3']);
+  // arithmetic operators chain operands, so "+ 1" and "/" fractions are now pulled into the run
+  assert.deepEqual(runs('0 < n + 1'), ['0 < n + 1']);
+  assert.deepEqual(runs('1/2 < 3/4'), ['1/2 < 3/4']);
 });

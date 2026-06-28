@@ -108,8 +108,9 @@ test('celsius: boundaries — period, parens, comma, equals, plus-minus', () => 
   assert.deepEqual(runs('(0°C < 100°C)'), ['0°C < 100°C']);         // parens left to UBA
   assert.deepEqual(runs('25°C, 30°C, 35°C'), []);                   // a list, no comparison
   assert.deepEqual(runs('הראינו ש-25°C < 30°C. נכון'), ['25°C < 30°C']); // period ends the run
-  assert.deepEqual(runs('100°C = 212°F'), []);                      // `=` is symmetric → no isolation needed
-  assert.deepEqual(runs('37°C ± 0.5°C'), []);                       // ± is not a relation
+  // `=` and `±` ARE arithmetic operators between numeric operands → the equation is isolated LTR
+  assert.deepEqual(runs('100°C = 212°F'), ['100°C = 212°F']);       // conversion equation
+  assert.deepEqual(runs('37°C ± 0.5°C'), ['37°C ± 0.5°C']);
 });
 
 // ─────────────────────────── signed temperatures (standalone, not a comparison) ───────────────────────────
