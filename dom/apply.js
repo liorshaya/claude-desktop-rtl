@@ -111,7 +111,22 @@ function processTable(table) {
   const shape = readTableShape(table);
   if (tableDir(shape.allCells, shape.headers) === 'rtl') table.setAttribute('dir', 'rtl');
   alignColumns(table);
+  overrideCellDirs(table); // §8.K per cell: fix a Latin/marker-opener majority-RTL cell
   table.setAttribute(DONE_ATTR, '1');
+}
+
+// §8.K, per cell — a cell that OPENS with Latin/marker but is majority-RTL ("React הוא
+// ספרייה", "WhatsApp הודעה חדשה") renders LTR-base under the leaf `plaintext`; force its
+// internal direction RTL (alignment stays with the column, §3.2). Idempotent; never overwrites
+// an explicit dir; skips cells holding a source/code view.
+function overrideCellDirs(table) {
+  const cells = qsa('th, td', table);
+  for (let i = 0; i < cells.length && i < MAX_NODES_PER_PASS; i++) {
+    const cell = cells[i];
+    if (cell.getAttribute('data-rtl-dir') || cell.getAttribute('dir')) continue;
+    if (cell.closest('pre, code')) continue;
+    if (plaintextOverrideDir(proseText(cell)) === 'rtl') applyCellRtlOverride(cell);
+  }
 }
 
 // §3.2 layer 2 — per-column alignment for clean mixed-direction tables. Each column hugs
@@ -401,6 +416,19 @@ function applyRtlOverride(el) {
   }
 }
 
+// §8.K for a TABLE CELL — same misfire (a Latin/marker opener of a majority-RTL cell renders
+// LTR-base under `plaintext`), but a cell must NOT take the prose override's `text-align:right`:
+// a cell's alignment edge belongs to its COLUMN (`data-rtl-col`), not its own first-strong. So
+// force only the internal base direction (direction + isolate) and leave alignment alone.
+function applyCellRtlOverride(cell) {
+  cell.setAttribute('data-rtl-dir', 'rtl');
+  cell.setAttribute('dir', 'rtl');
+  if (cell.style && cell.style.setProperty) {
+    cell.style.setProperty('direction', 'rtl', 'important');
+    cell.style.setProperty('unicode-bidi', 'isolate', 'important'); // beat the leaf `plaintext`
+  }
+}
+
 // §3.2/§8.K — headings/paragraphs are owned by CSS `plaintext` EXCEPT when plaintext's
 // first-strong misfires on a Latin/marker opener of a majority-RTL block ("8c. בדיקה…",
 // "React הוא ספרייה"). Then force RTL; otherwise leave it untouched (English is never
@@ -409,7 +437,7 @@ function processProseDir(el) {
   if (el.getAttribute('data-rtl-dir')) return; // already overridden by us
   if (el.getAttribute('dir')) return; // respect an explicit dir we didn't set
   if (el.closest('pre, code')) return; // source/code view → stays LTR
-  if (el.closest('table')) return; // table cells have their own layering (§3.2)
+  if (el.closest('table')) return; // table cells get §8.K via overrideCellDirs (no text-align)
   if (plaintextOverrideDir(proseText(el)) === 'rtl') applyRtlOverride(el);
 }
 
