@@ -146,6 +146,12 @@ function isConnectorCp(cp) {
 // A "weak nullary" math value that reorders in RTL on its own (like a digit): ∅ ⊤ ⊥. Used to gate
 // an arithmetic/set run that has no digit/bracket but still scrambles ("A ∩ B = ∅").
 const WEAKVAL_RE = /[∅⊤⊥]/;
+// SUBSCRIPTED limit / extremum operators — a multi-LETTER name (not a single prefix symbol) with a
+// "_" subscript bound, e.g. "lim_{x→0}", "sup_{n}", "max_{i}". The name + bound + the space-separated
+// BODY are ONE expression: otherwise the operator reorders past the isolated body ("lim_{x→0} f=1"
+// renders "f=1 lim_{x→0}") AND the arrow inside the bound flips ("x→0" → "x←0"). Word-boundary
+// before the name (lookbehind), and it must be followed by "_".
+const LIMIT_RE = /(?<![A-Za-z])(limsup|liminf|argmax|argmin|lim|sup|inf|max|min|det|gcd|lcm)_/g;
 // PREFIX math operators: a symbol whose operand is on the RIGHT — roots √∛∜, big operators
 // ∑∏∐∫∮… (sum/product/integral), quantifiers ∀∃∄, logical-not ¬, differential ∇∂, and the
 // n-ary logical/set/operators ⋀⋁⋂⋃ ⨀…⨉. In an RTL line the symbol is neutral and the UBA places
@@ -468,6 +474,17 @@ function relationRuns(text) {
       }
     }
     i += w;
+  }
+  // A SUBSCRIPTED limit/extremum operator ("lim_{x→0} f(x)/x = 1") — seed from the name and grow
+  // right over the bound + body (the leading-script scanner in termEndRight consumes "_{x→0}" then
+  // the body across the space, and the connector chain picks up "= 1").
+  LIMIT_RE.lastIndex = 0;
+  let lm;
+  while ((lm = LIMIT_RE.exec(text))) {
+    const nameStart = lm.index;
+    const nameEnd = lm.index + lm[1].length; // at the "_"
+    const e = expandRight(nameEnd);
+    if (e > nameEnd) runs.push([nameStart, e]);
   }
   // A STANDALONE absolute value whose content reorders ("|x − 3|", "|f(x) − f(a)|"): seed the whole
   // |…| group (with a relation/operator around it, the relation seed already grew to include it via

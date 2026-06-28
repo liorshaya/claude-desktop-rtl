@@ -64,6 +64,22 @@ function hasMirrorArrow(str) {
 function arrowFlipOffsets(text) {
   const out = [];
   if (!text) return out;
+  // Ranges of a literal braced sub/superscript "_{…}" / "^{…}" — an arrow inside a math BOUND
+  // ("lim_{x→0}", "a_{i→j}") is LTR math semantics and must NOT flip (otherwise "x→0" → "x←0").
+  const scriptRanges = [];
+  for (let i = 0; i + 1 < text.length; i++) {
+    if ((text[i] === '_' || text[i] === '^') && text[i + 1] === '{') {
+      let depth = 0;
+      for (let j = i + 1; j < text.length; j++) {
+        if (text[j] === '{') depth += 1;
+        else if (text[j] === '}') { depth -= 1; if (depth === 0) { scriptRanges.push([i, j]); i = j; break; } }
+      }
+    }
+  }
+  const inScript = (p) => {
+    for (let k = 0; k < scriptRanges.length; k++) if (p > scriptRanges[k][0] && p < scriptRanges[k][1]) return true;
+    return false;
+  };
   const segs = segmentMath(text);
   for (let s = 0; s < segs.length; s++) {
     const seg = segs[s];
@@ -72,7 +88,7 @@ function arrowFlipOffsets(text) {
     for (let i = 0; i < v.length; ) {
       const cp = v.codePointAt(i);
       const w = cp > 0xffff ? 2 : 1;
-      if (isMirrorArrow(cp)) {
+      if (isMirrorArrow(cp) && !inScript(seg.start + i)) {
         // skip an arrow embedded in an LTR run (both nearest strong neighbours are LTR)
         if (!(neighborDir(v, i - 1, -1) === 'L' && neighborDir(v, i + w, 1) === 'L')) {
           out.push(seg.start + i);

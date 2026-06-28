@@ -179,6 +179,9 @@ const ARROWS_ATTR = 'data-rtl-arrows';
 function inLtrIsland(node) {
   const el = node.parentElement;
   if (!el || !el.closest) return false;
+  // An isolated math run (relations pass runs first) is already LTR — an arrow inside it points the
+  // right way ("lim_{x→0}"), so do NOT flip it. Without this the arrow in the bound reverses.
+  if (el.closest('[data-rtl-relation]')) return true;
   const island = el.closest(SELECTORS.math + ', ' + SELECTORS.code);
   if (!island) return false;
   if (island.closest('pre[data-rtl-text]')) return false; // mis-fenced prose → arrows flip
