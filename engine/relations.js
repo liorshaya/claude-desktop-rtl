@@ -124,6 +124,11 @@ function relationRuns(text) {
       if (i > 1 && i < bodyEnd && isSep(ch(i - 1)) && isDigitCh(ch(i - 2)) && isDigitCh(ch(i))) {
         i -= 1; continue;
       }
+      // a degree joins a number to its unit, possibly across one SI space (25°C, 25 °C, 98.6°F)
+      if (i < bodyEnd && ch(i - 1) === '°' && isTermChar(ch(i))) {
+        if (i > 1 && isTermChar(ch(i - 2))) { i -= 1; continue; }                     // 25°C
+        if (i > 2 && ch(i - 2) === ' ' && isTermChar(ch(i - 3))) { i -= 2; continue; } // 25 °C
+      }
       break;
     }
     if (i === bodyEnd) return end; // no body → the suffixes (if any) weren't an operand
@@ -143,6 +148,11 @@ function relationRuns(text) {
     for (;;) {
       if (i < len && isTermChar(ch(i))) { i += 1; continue; }
       if (i > body0 && isSep(ch(i)) && isDigitCh(ch(i - 1)) && i + 1 < len && isDigitCh(ch(i + 1))) {
+        i += 1; continue;
+      }
+      // a degree joins a number to its unit, possibly across one SI space (25°C, 25 °C, 98.6°F)
+      if (i > body0 && ch(i) === '°' && i + 1 < len && isTermChar(ch(i + 1))) { i += 1; continue; }
+      if (i > body0 && ch(i) === ' ' && ch(i + 1) === '°' && i + 2 < len && isTermChar(ch(i + 2))) {
         i += 1; continue;
       }
       break;
