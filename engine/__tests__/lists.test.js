@@ -124,3 +124,46 @@ test('nested list items: every level self-determines from its own text', () => {
   assert.equal(liDir('תת-סעיף עברי'), 'rtl');
   assert.equal(liDir('deeper: עוד עברית כאן ברובו'), 'rtl'); // majority Hebrew → override rtl
 });
+
+// ─────────────────────── items whose content is MATH / arrows / units ───────────────────────
+test('list items: math/arrow/unit content follows its language', () => {
+  assert.equal(liDir('25°C < 30°C'), 'ltr');                 // pure math (Latin unit) → ltr
+  assert.equal(liDir('הטמפרטורה 25°C < 30°C גבוהה'), 'rtl');  // Hebrew majority → rtl
+  assert.equal(liDir('x → y'), 'ltr');                        // pure arrow expr → ltr
+  assert.equal(liDir('קלט → פלט'), 'rtl');                    // Hebrew → rtl
+  assert.equal(liDir('f(x) = g(x)'), 'ltr');
+  assert.equal(liDir('בדוק ש-3 < 5 נכון'), 'rtl');
+  assert.equal(liDir('עלות 100 ₪ בלבד'), 'rtl');             // currency in Hebrew → rtl
+});
+test('list items: a comparison/relation with NO strong letter → auto', () => {
+  assert.equal(liDir('3 < 5 ≤ 7'), 'auto');                  // digits + relations only
+  assert.equal(liDir('0 ≤ x'), 'ltr');                       // x is a strong-LTR letter
+  assert.equal(liDir('100 ₪'), 'auto');                      // number + currency, no letter
+});
+
+// ─────────────────────── symbol / emoji / URL items ───────────────────────
+test('list items: symbol/emoji-only → auto; URL items follow surrounding text', () => {
+  assert.equal(liDir('🎉'), 'auto');
+  assert.equal(liDir('→ → →'), 'auto');
+  assert.equal(liDir('• • •'), 'auto');
+  assert.equal(liDir('— — —'), 'auto');
+  assert.equal(liDir('https://example.com'), 'ltr');         // a bare URL is LTR
+  assert.equal(liDir('ראה https://example.com לפרטים'), 'rtl'); // Hebrew around a URL → rtl
+});
+
+// ─────────────────────── quoted / parenthesised items ───────────────────────
+test('list items: quotes/parentheses around the content do not change its direction', () => {
+  assert.equal(liDir('"ציטוט בעברית"'), 'rtl');
+  assert.equal(liDir('"an English quote"'), 'ltr');
+  assert.equal(liDir('(הערה חשובה)'), 'rtl');
+  assert.equal(liDir('(a side note)'), 'ltr');
+  assert.equal(liDir('«ציטוט»'), 'rtl');
+});
+
+// ─────────────────────── majority-boundary cases ───────────────────────
+test('list items: first-strong + majority near the boundary', () => {
+  assert.equal(liDir('one two three four עברית'), 'ltr');     // 4 EN vs 1 HE → ltr
+  assert.equal(liDir('אחד שתיים שלוש four'), 'rtl');          // 3 HE vs 1 EN → rtl
+  assert.equal(liDir('עברית API'), 'rtl');                    // Hebrew first + majority
+  assert.equal(liDir('API מאפשר גישה נוחה לכל הנתונים'), 'rtl'); // English opener, HE majority → override
+});
