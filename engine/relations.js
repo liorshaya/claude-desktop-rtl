@@ -54,9 +54,10 @@ function hasMathRun(str) {
     else if ((cp >= 0x30 && cp <= 0x39) || (cp >= 0x660 && cp <= 0x669) || (cp >= 0x6f0 && cp <= 0x6f9)) dig = true;
     if (cp === 0x5b || cp === 0x28 || cp === 0x7b || cp === 0x27e8) bracket = true; // [ ( { ⟨
     else if (cp === 0x2c) comma = true; // ,
-    // arithmetic over digits ("15 + 7 = 22") OR a bracket+comma group ("[a, b]", "(0, 1)"). Both
-    // are over-approximations — relationRuns makes the precise call (and returns [] for prose).
-    if ((op && dig) || (bracket && comma)) return true;
+    // arithmetic over digits ("15 + 7 = 22") OR a bracket group with a comma/operator ("[a, b]",
+    // "(0, 1)", "(a + b)²"). All over-approximations — relationRuns makes the precise call (and
+    // returns [] for prose), so a loose gate only costs an extra parse, never correctness.
+    if ((op && dig) || (bracket && (comma || op))) return true;
   }
   return false;
 }
@@ -96,10 +97,16 @@ function isDigitCh(ch) {
 function isSign(ch) {
   return ch === '+' || ch === '-' || ch === '−'; // + - −(U+2212)
 }
-// Currency that can prefix or suffix a number operand ($5, 5₪). isSuffix also covers %/°.
+// Currency that can prefix or suffix a number operand ($5, 5₪). isSuffix also covers %/°/!.
 const CURRENCY = '$₪€£¥¢₹₣';
 function isCurrency(ch) { return ch !== '' && CURRENCY.indexOf(ch) !== -1; }
-function isSuffix(ch) { return ch === '%' || ch === '°' || isCurrency(ch); } // 50% 10° 5₪
+function isSuffix(ch) { return ch === '%' || ch === '°' || ch === '!' || isCurrency(ch); } // 50% 10° 5₪ n!
+// A precomposed super/subscript glyph: ² ³ ¹ and the super/subscript block — a power/index that
+// can trail a BRACKET group ("(a+b)²", "(1+1/n)ⁿ"), where it is NOT a plain term char of a base.
+function isScriptChar(ch) {
+  const c = ch.charCodeAt(0);
+  return c === 0xb2 || c === 0xb3 || c === 0xb9 || (c >= 0x2070 && c <= 0x209f);
+}
 // '.'/',' are number-internal separators (3.14, 1,000) — counted ONLY between two digits, so a
 // sentence period ("2.") and a list comma ("x, y") never join an operand.
 function isSep(ch) { return ch === '.' || ch === ','; }
@@ -233,14 +240,14 @@ function relationRuns(text) {
   // to that group (conditional probability "P(A | B)", set-builder "{x | x>0}"). These act like a
   // bracket operand so "|x − 3| < 5" and "|x| + 1 < 5" and "|f(x) − f(a)| < δ" isolate whole.
   const absSpans = [];
-  {
+  for (const bar of ['|', '‖']) { // | (abs value) and ‖ (norm) — paired within their own kind
     let depth = 0;
     const bars = [];
     for (let j = 0; j < len; j++) {
       const c = ch(j);
       if (OPENERS.indexOf(c) !== -1) depth += 1;
       else if (CLOSERS.indexOf(c) !== -1) { if (depth > 0) depth -= 1; }
-      else if (c === '|' && depth === 0) bars.push(j);
+      else if (c === bar && depth === 0) bars.push(j);
     }
     for (let b = 0; b + 1 < bars.length; b += 2) {
       const o = bars[b];
@@ -260,7 +267,8 @@ function relationRuns(text) {
   // `end` (exclusive), or `end` if there is none. Scans right-to-left.
   function termStartLeft(end) {
     let i = end;
-    while (i > 0 && isSuffix(ch(i - 1))) i -= 1; // trailing suffix(es): 50%, 10°, 5₪
+    while (i > 0 && isSuffix(ch(i - 1))) i -= 1; // trailing suffix(es): 50%, 10°, 5₪, n!
+    while (i > 0 && isScriptChar(ch(i - 1))) i -= 1; // a power on a bracket group: "(a+b)²", "(1+1/n)ⁿ"
     // a |…| absolute-value / norm group ending here is ONE operand: "|x − 3|", "|f(x) − f(a)|"
     if (i > 0) { const s = absCloseStart(i - 1); if (s >= 0) return s; }
     // a bracket group / function-call args ending here is ONE operand: "(3 × 5)", "[a, b]", "f(x)"
@@ -411,8 +419,9 @@ function relationRuns(text) {
       if (e > i + w) runs.push([expandLeft(i), e]);
     } else if (OPENERS.indexOf(text[i]) !== -1) {
       // A STANDALONE bracket group with math content ("[a, b]", "(0, ∞)", "(3 × 5)", "{1, 2, 3}").
-      const e = mathBracketEnd(i);
+      let e = mathBracketEnd(i);
       if (e > i) {
+        while (e < len && isScriptChar(ch(e))) e += 1; // a trailing power: "(a+b)²", "(1+1/n)ⁿ"
         let s = i;
         while (s > 0 && isTermChar(ch(s - 1))) s -= 1; // a leading function name: "f(x, y)"
         runs.push([s, e]);
@@ -430,7 +439,13 @@ function relationRuns(text) {
         const s = expandLeft(i);
         const e = expandRight(i + w);
         const slice = text.slice(s, e);
-        if (s < i && e > i + w && (DIGITS.test(slice) || PREFIX_RE.test(slice))) runs.push([s, e]);
+        // isolate an arithmetic run that carries something which REORDERS: a digit ("15 + 7 = 22"),
+        // a prefix op ("c = √x"), or a math bracket — a "(…)"/"[…]" with an operator/comma inside,
+        // which itself scrambles ("(a+b)² = c" reads "c = (a+b)²" otherwise). A plain function call
+        // "f(x) = y" has no such bracket and is letter-anchored, so it stays out.
+        let hasMB = false;
+        for (let p = s; p < e && !hasMB; p++) if (OPENERS.indexOf(ch(p)) !== -1 && mathBracketEnd(p) > p) hasMB = true;
+        if (s < i && e > i + w && (DIGITS.test(slice) || PREFIX_RE.test(slice) || hasMB)) runs.push([s, e]);
       }
     }
     i += w;
