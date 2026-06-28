@@ -105,7 +105,10 @@ test('celsius: a bare degree (angle, no unit letter) is unaffected', () => {
 // ─────────────────────────── boundaries: period, parens, comma, = , ± ───────────────────────────
 test('celsius: boundaries — period, parens, comma, equals, plus-minus', () => {
   assert.deepEqual(runs('הגענו ל-25°C. עכשיו'), []);                // a value, no comparison
-  assert.deepEqual(runs('(0°C < 100°C)'), ['0°C < 100°C']);         // parens left to UBA
+  assert.deepEqual(runs('(0°C < 100°C)'), ['(0°C < 100°C)']);       // whole bracket group isolated
+  // ↑ DOM-verified: isolating only the inner comparison leaves the flanking ( ) to the UBA, which
+  // in RTL mirrors+swaps them to ")0°C < 100°C(" — the same bug as "[a, b]"→"]a,b[". Wrapping the
+  // whole "(…)" group keeps the parens upright and on their correct sides.
   assert.deepEqual(runs('25°C, 30°C, 35°C'), []);                   // a list, no comparison
   assert.deepEqual(runs('הראינו ש-25°C < 30°C. נכון'), ['25°C < 30°C']); // period ends the run
   // `=` and `±` ARE arithmetic operators between numeric operands → the equation is isolated LTR

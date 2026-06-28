@@ -44,12 +44,19 @@ function hasMathRun(str) {
   if (!str) return false;
   let op = false;
   let dig = false;
+  let bracket = false;
+  let comma = false;
   for (const ch of str) {
     const cp = ch.codePointAt(0);
     if (isMirroredMathRel(cp)) return true;
+    if (isPrefixOp(cp)) return true; // a prefix op (√ ∑ ∀ ¬ …) is an unambiguous math signal
     if (isArithOp(cp)) op = true;
     else if ((cp >= 0x30 && cp <= 0x39) || (cp >= 0x660 && cp <= 0x669) || (cp >= 0x6f0 && cp <= 0x6f9)) dig = true;
-    if (op && dig) return true;
+    if (cp === 0x5b || cp === 0x28 || cp === 0x7b || cp === 0x27e8) bracket = true; // [ ( { ⟨
+    else if (cp === 0x2c) comma = true; // ,
+    // arithmetic over digits ("15 + 7 = 22") OR a bracket+comma group ("[a, b]", "(0, 1)"). Both
+    // are over-approximations — relationRuns makes the precise call (and returns [] for prose).
+    if ((op && dig) || (bracket && comma)) return true;
   }
   return false;
 }
@@ -78,6 +85,7 @@ function isTermChar(ch) {
   if (c >= 0x2100 && c <= 0x214f) return true;             // Letterlike (ℕ ℤ ℝ ℚ ℂ …)
   if (c === 0xb2 || c === 0xb3 || c === 0xb9) return true; // ² ³ ¹ (Latin-1 superscripts)
   if (c >= 0x2070 && c <= 0x209f) return true;             // super/subscripts (x² aₙ x⁻¹ 2³ …)
+  if (c === 0x221e) return true;                           // ∞ (a value: "x ≤ ∞", "(0, ∞)")
   return false; // NB: '.' is handled by the scanners as a decimal only BETWEEN term chars,
                 // so a sentence-final period ("7 > 2.") is not swallowed into the operand.
 }
@@ -110,6 +118,35 @@ function isArithOp(cp) {
 function isConnectorCp(cp) {
   return isArithOp(cp) || isMirroredMathRel(cp);
 }
+// PREFIX math operators: a symbol whose operand is on the RIGHT — roots √∛∜, big operators
+// ∑∏∐∫∮… (sum/product/integral), quantifiers ∀∃∄, logical-not ¬, differential ∇∂, and the
+// n-ary logical/set/operators ⋀⋁⋂⋃ ⨀…⨉. In an RTL line the symbol is neutral and the UBA places
+// it AFTER its operand ("∑ x_i" → "x_i ∑", "√(a²+b²)" → "(a²+b²)√", "¬p" → "p¬"); isolating the
+// "PREFIX OPERAND" run LTR keeps the symbol on its left where it belongs. These are unambiguous
+// math, so (unlike arithmetic) they need no digit to seed — but a prefix with no operand to its
+// right (a stray ∑) and a prefix over Hebrew prose ("∑ גדול") never form a run.
+function isPrefixOp(cp) {
+  return (cp >= 0x221a && cp <= 0x221c)                 // √ ∛ ∜  roots
+    || cp === 0x2211                                    // ∑  summation
+    || cp === 0x220f || cp === 0x2210                   // ∏ ∐  product / coproduct
+    || (cp >= 0x222b && cp <= 0x2233)                   // ∫ ∬ ∭ ∮ ∯ ∰ ∱ ∲ ∳  integrals
+    || cp === 0x2200 || cp === 0x2203 || cp === 0x2204  // ∀ ∃ ∄  quantifiers
+    || cp === 0x00ac                                    // ¬  logical not
+    || cp === 0x2207 || cp === 0x2202                   // ∇ ∂  nabla / partial-differential
+    || (cp >= 0x22c0 && cp <= 0x22c3)                   // ⋀ ⋁ ⋂ ⋃  n-ary logical / set
+    || (cp >= 0x2a00 && cp <= 0x2a09);                  // ⨀ ⨁ ⨂ ⨃ ⨄ ⨅ ⨆ ⨇ ⨈ ⨉  n-ary operators
+}
+// Same set as a regex, to test a whole run-slice for "carries a prefix op" (a math signal that,
+// like a digit, justifies isolating an otherwise letters-only arithmetic run such as "c = √x").
+const PREFIX_RE = /[\u00ac\u221a-\u221c\u2211\u220f\u2210\u222b-\u2233\u2200\u2203\u2204\u2207\u2202\u22c0-\u22c3\u2a00-\u2a09]/;
+// Strong-RTL guard for bracket groups: a bracket whose content is Hebrew/Arabic prose ("(הערה)")
+// must NEVER be forced LTR — that would scramble the prose. Hebrew, Arabic, presentation forms.
+const STRONG_RTL_RE = /[\u0590-\u08ff\ufb1d-\ufdff\ufe70-\ufefc]/;
+// A prose word inside brackets: ≥3 consecutive Latin letters ("(see note)") — distinguishes prose
+// from math variables (1–2 letters: "(a, b)") and numbers, so prose parentheticals stay untouched.
+const WORD3_RE = /[A-Za-z]{3,}/;
+const OPENERS = '([{\u27e8';   // ( [ { ⟨
+const CLOSERS = ')]}\u27e9';   // ) ] } ⟩
 
 // The maximal comparison AND arithmetic EXPRESSIONS to ISOLATE in `text`, as UTF-16 [start, end)
 // ranges. Seeds are every mirror-relation char (except a `<`/`>` of an HTML tag) and every BINARY
@@ -137,25 +174,43 @@ function relationRuns(text) {
     return false;
   };
 
-  // Balanced-paren matchers, so a parenthesised sub-expression is ONE operand: "(3 × 5) + 2 = 17"
-  // (without them the "(3 × 5)" splits off and the line scrambles). matchParenRight: from an "("
-  // at i → the index past its matching ")", or i if unbalanced. matchParenLeft: from a ")" at i →
-  // its matching "(" index, or i+1 if unbalanced.
-  function matchParenRight(i) {
+  // Balanced-bracket matchers (over ( ) [ ] { } ⟨ ⟩, nesting-aware), so a bracketed sub-expression
+  // is ONE operand: "(3 × 5) + 2 = 17", "[a, b]", "f(x)". Without them the bracket group splits off
+  // and the line scrambles. bracketSpanEnd: from an opener at i → the index past its matching
+  // closer, or i if unbalanced. bracketSpanLeft: from a closer at i → its matching opener index,
+  // or i+1 if unbalanced. Mixed pairs are allowed for half-open intervals — "[a, b)" matches.
+  function bracketSpanEnd(i) {
     let depth = 0;
     for (let j = i; j < len; j++) {
-      if (ch(j) === '(') depth += 1;
-      else if (ch(j) === ')') { depth -= 1; if (depth === 0) return j + 1; }
+      if (OPENERS.indexOf(ch(j)) !== -1) depth += 1;
+      else if (CLOSERS.indexOf(ch(j)) !== -1) { depth -= 1; if (depth === 0) return j + 1; }
     }
     return i;
   }
-  function matchParenLeft(i) {
+  function bracketSpanLeft(i) {
     let depth = 0;
     for (let j = i; j >= 0; j--) {
-      if (ch(j) === ')') depth += 1;
-      else if (ch(j) === '(') { depth -= 1; if (depth === 0) return j; }
+      if (CLOSERS.indexOf(ch(j)) !== -1) depth += 1;
+      else if (OPENERS.indexOf(ch(j)) !== -1) { depth -= 1; if (depth === 0) return j; }
     }
     return i + 1;
+  }
+  // A STANDALONE "math bracket" group to isolate (no surrounding operator to seed it): a balanced
+  // bracket whose content carries a COMMA or a math CONNECTOR/PREFIX — an interval/tuple/finite-set
+  // or a grouped expression: "[a, b]", "(0, 1]", "(x, y)", "{1, 2, 3}", "(3 × 5)", "(a + b)". It is
+  // NOT a math bracket if the content is RTL prose ("(הערה)") or holds a ≥3-letter Latin word
+  // ("(see note)") — those stay untouched. Returns the index past the closer, or `open` if not.
+  function mathBracketEnd(open) {
+    if (OPENERS.indexOf(ch(open)) === -1) return open;
+    const close = bracketSpanEnd(open);
+    if (close === open) return open;
+    const inner = text.slice(open + 1, close - 1);
+    if (!inner.trim() || STRONG_RTL_RE.test(inner) || WORD3_RE.test(inner)) return open;
+    for (const c of inner) {
+      const cp = c.codePointAt(0);
+      if (cp === 0x2c || isConnectorCp(cp) || isPrefixOp(cp)) return close; // a math signal inside
+    }
+    return open;
   }
 
   // Start index of the TERM ending at `end` (exclusive), '' if none. Attaches a leading sign
@@ -167,9 +222,9 @@ function relationRuns(text) {
   function termStartLeft(end) {
     let i = end;
     while (i > 0 && isSuffix(ch(i - 1))) i -= 1; // trailing suffix(es): 50%, 10°, 5₪
-    // a parenthesised group / function-call args ending here is ONE operand: "(3 × 5)", "f(x)"
-    if (i > 0 && ch(i - 1) === ')') {
-      const open = matchParenLeft(i - 1);
+    // a bracket group / function-call args ending here is ONE operand: "(3 × 5)", "[a, b]", "f(x)"
+    if (i > 0 && CLOSERS.indexOf(ch(i - 1)) !== -1) {
+      const open = bracketSpanLeft(i - 1);
       if (open < i - 1) {
         let s = open;
         while (s > 0 && isTermChar(ch(s - 1))) s -= 1; // a leading function-call name: f(x), sin(θ)
@@ -202,11 +257,22 @@ function relationRuns(text) {
   // `start`, or `start` if there is none. Scans left-to-right.
   function termEndRight(start) {
     let i = start;
+    // a chain of PREFIX operators leads its operand on the right: "√x", "∑ x_i", "¬p", "∫ f",
+    // "= √(a²+b²)". Consume the prefix(es) (a prefix may be followed by one SI-style space), then
+    // the operand after them — so a binary op's right side can be a prefix expression.
+    {
+      let k = i;
+      while (k < len && isPrefixOp(text.codePointAt(k))) {
+        k += text.codePointAt(k) > 0xffff ? 2 : 1;
+        while (k < len && isWS(ch(k))) k += 1;
+      }
+      if (k > i) { const e = termEndRight(k); return e > k ? e : start; } // prefix + operand, else none
+    }
     if (isSign(ch(i)) && i + 1 < len && (isDigitCh(ch(i + 1)) || isCurrency(ch(i + 1)))) i += 1; // -5, -$5
     if (isCurrency(ch(i))) i += 1; // leading currency: $5
-    // a parenthesised group is ONE operand: "(3 × 5)", "(a + b)"
-    if (ch(i) === '(') {
-      const close = matchParenRight(i);
+    // a bracket group is ONE operand: "(3 × 5)", "(a + b)", "[a, b]", "{1, 2}"
+    if (OPENERS.indexOf(ch(i)) !== -1) {
+      const close = bracketSpanEnd(i);
       if (close > i) {
         i = close;
         while (i < len && isSuffix(ch(i))) i += 1;
@@ -228,8 +294,8 @@ function relationRuns(text) {
       break;
     }
     if (i === body0) return start; // a lone currency/sign with no number body → not an operand
-    // a function call: an identifier immediately followed by balanced parens — "f(x)", "sin(θ)"
-    if (ch(i) === '(') { const close = matchParenRight(i); if (close > i) i = close; }
+    // a function call: an identifier immediately followed by a bracket group — "f(x)", "sin(θ)"
+    if (OPENERS.indexOf(ch(i)) !== -1) { const close = bracketSpanEnd(i); if (close > i) i = close; }
     while (i < len && isSuffix(ch(i))) i += 1; // trailing suffix(es): %, °, currency
     return i;
   }
@@ -269,8 +335,8 @@ function relationRuns(text) {
     return runEnd;
   }
 
-  // Seed at every mirror-relation (skip tag brackets) and every BINARY arithmetic operator;
-  // grow each to the whole expression.
+  // Seed at every mirror-relation (skip tag brackets), every PREFIX operator, every standalone
+  // math bracket, and every BINARY arithmetic operator; grow each to the whole expression.
   const runs = [];
   for (let i = 0; i < len; ) {
     const cp = text.codePointAt(i);
@@ -278,19 +344,33 @@ function relationRuns(text) {
     if (isMirroredMathRel(cp)) {
       const c = text[i];
       if (!((c === '<' || c === '>') && inTag(i))) runs.push([expandLeft(i), expandRight(i + w)]);
+    } else if (isPrefixOp(cp)) {
+      // A prefix operator's operand is on the RIGHT ("∑ x_i", "√(a²+b²)", "∀x ∈ ℝ", "¬p"). Isolate
+      // [prefix … operand]; needs a right operand (a stray ∑, or ∑ before Hebrew prose, makes none).
+      const e = expandRight(i + w);
+      if (e > i + w) runs.push([expandLeft(i), e]);
+    } else if (OPENERS.indexOf(text[i]) !== -1) {
+      // A STANDALONE bracket group with math content ("[a, b]", "(0, ∞)", "(3 × 5)", "{1, 2, 3}").
+      const e = mathBracketEnd(i);
+      if (e > i) {
+        let s = i;
+        while (s > 0 && isTermChar(ch(s - 1))) s -= 1; // a leading function name: "f(x, y)"
+        runs.push([s, e]);
+      }
     } else if (isArithOp(cp)) {
-      // An arithmetic operator seeds ONLY as a BINARY op (operands on both sides) whose run holds
-      // a digit — the all-weak case that reorders ("15 + 7 = 22"). A leading SIGN (+ - − at a word
-      // boundary, immediately before a digit: "-5", "low -40°C") is NOT binary — it belongs to its
-      // number, so it is skipped here (the operand scanner / signedNumberRuns own it). A
-      // letters-only run ("well-known", "a = b") carries no digit and never reorders.
+      // An arithmetic operator seeds ONLY as a BINARY op (operands on both sides) whose run holds a
+      // digit OR a prefix op — the all-weak case that reorders ("15 + 7 = 22", "c = √x"). A leading
+      // SIGN (+ - − at a word boundary, immediately before a digit: "-5", "low -40°C") is NOT binary
+      // — it belongs to its number, so it is skipped here (signedNumberRuns owns it). A letters-only
+      // run with no prefix ("well-known", "a = b") never reorders.
       const c = text[i];
       const sign = (c === '+' || c === '-' || c === '−')
         && (i === 0 || !LETTER_OR_NUMBER.test(text[i - 1])) && DIGITS.test(text[i + w] || '');
       if (!sign) {
         const s = expandLeft(i);
         const e = expandRight(i + w);
-        if (s < i && e > i + w && DIGITS.test(text.slice(s, e))) runs.push([s, e]);
+        const slice = text.slice(s, e);
+        if (s < i && e > i + w && (DIGITS.test(slice) || PREFIX_RE.test(slice))) runs.push([s, e]);
       }
     }
     i += w;
