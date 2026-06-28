@@ -18,7 +18,7 @@ const RTL_RANGES = [
   [0x08A0, 0x08FF], // Arabic Extended-A
   [0xFB1D, 0xFB4F], // Hebrew presentation forms
   [0xFB50, 0xFDFF], // Arabic presentation forms A
-  [0xFE70, 0xFEFF], // Arabic presentation forms B
+  [0xFE70, 0xFEFC], // Arabic presentation forms B (ends at FEFC; FEFF is the BOM/ZWNBSP — neutral)
   [0x10800, 0x1085F], // Cypriot / Imperial Aramaic vicinity
   [0x10A00, 0x10A5F], // Kharoshthi
   [0x1E800, 0x1E8DF], // Mende Kikakui
