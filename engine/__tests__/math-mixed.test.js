@@ -73,10 +73,9 @@ test('mixed/EN: signed numbers', () => {
 });
 
 // ──────────────────────────── documented limitations (locked) ────────────────────────────
-test('mixed: KNOWN LIMITS — function-call parens and space-separated operands', () => {
-  // A parenthesised function argument is not pulled into the operand (parens are left to UBA,
-  // which mirrors them correctly); only the bare relation + adjacent token isolate.
-  assert.deepEqual(runs('f(x) ≤ g(x)'), ['≤ g']);
+test('mixed: KNOWN LIMITS — only a space-separated multi-token operand still splits', () => {
+  // function-call parens ARE captured now (a whole balanced "(…)" is one operand):
+  assert.deepEqual(runs('f(x) ≤ g(x)'), ['f(x) ≤ g(x)']);
   // a function application spanning a SPACE ("cos θ") still splits at the space
   assert.deepEqual(runs('-1 ≤ cos θ ≤ 1'), ['-1 ≤ cos', 'θ ≤ 1']);
   // arithmetic operators chain operands, so "+ 1" and "/" fractions are now pulled into the run

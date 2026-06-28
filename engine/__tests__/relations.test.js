@@ -143,8 +143,8 @@ test('relationRuns: plain words after the expression are NOT swallowed (needs a 
 });
 
 test('relationRuns: brackets / symmetric ops / arrows are never isolated; empty/none → []', () => {
-  assert.deepEqual(relationRuns('f(3) = 5'), []);   // () + = → no mirrored seed
-  assert.deepEqual(relationRuns('[a] {b}'), []);     // brackets → none
+  assert.deepEqual(relationRuns('f(x) = y'), []);   // a function call with NO digit → not isolated
+  assert.deepEqual(relationRuns('[a] {b}'), []);     // square/curly brackets → none
   assert.deepEqual(relationRuns('a → b ↔ c'), []);   // arrows → none (handled elsewhere)
   assert.deepEqual(relationRuns('שלום עולם'), []);
   assert.deepEqual(relationRuns(''), []);

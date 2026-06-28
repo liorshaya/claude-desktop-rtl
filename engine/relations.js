@@ -137,6 +137,27 @@ function relationRuns(text) {
     return false;
   };
 
+  // Balanced-paren matchers, so a parenthesised sub-expression is ONE operand: "(3 × 5) + 2 = 17"
+  // (without them the "(3 × 5)" splits off and the line scrambles). matchParenRight: from an "("
+  // at i → the index past its matching ")", or i if unbalanced. matchParenLeft: from a ")" at i →
+  // its matching "(" index, or i+1 if unbalanced.
+  function matchParenRight(i) {
+    let depth = 0;
+    for (let j = i; j < len; j++) {
+      if (ch(j) === '(') depth += 1;
+      else if (ch(j) === ')') { depth -= 1; if (depth === 0) return j + 1; }
+    }
+    return i;
+  }
+  function matchParenLeft(i) {
+    let depth = 0;
+    for (let j = i; j >= 0; j--) {
+      if (ch(j) === ')') depth += 1;
+      else if (ch(j) === '(') { depth -= 1; if (depth === 0) return j; }
+    }
+    return i + 1;
+  }
+
   // Start index of the TERM ending at `end` (exclusive), '' if none. Attaches a leading sign
   // when the term is a number and the sign sits at a word boundary (not after a letter/number).
   // An OPERAND is: optional leading currency, optional sign (on a number, at a word boundary),
@@ -146,6 +167,15 @@ function relationRuns(text) {
   function termStartLeft(end) {
     let i = end;
     while (i > 0 && isSuffix(ch(i - 1))) i -= 1; // trailing suffix(es): 50%, 10°, 5₪
+    // a parenthesised group / function-call args ending here is ONE operand: "(3 × 5)", "f(x)"
+    if (i > 0 && ch(i - 1) === ')') {
+      const open = matchParenLeft(i - 1);
+      if (open < i - 1) {
+        let s = open;
+        while (s > 0 && isTermChar(ch(s - 1))) s -= 1; // a leading function-call name: f(x), sin(θ)
+        return s;
+      }
+    }
     const bodyEnd = i;
     for (;;) {
       if (i > 0 && isTermChar(ch(i - 1))) { i -= 1; continue; }
@@ -174,6 +204,15 @@ function relationRuns(text) {
     let i = start;
     if (isSign(ch(i)) && i + 1 < len && (isDigitCh(ch(i + 1)) || isCurrency(ch(i + 1)))) i += 1; // -5, -$5
     if (isCurrency(ch(i))) i += 1; // leading currency: $5
+    // a parenthesised group is ONE operand: "(3 × 5)", "(a + b)"
+    if (ch(i) === '(') {
+      const close = matchParenRight(i);
+      if (close > i) {
+        i = close;
+        while (i < len && isSuffix(ch(i))) i += 1;
+        return i;
+      }
+    }
     const body0 = i;
     for (;;) {
       if (i < len && isTermChar(ch(i))) { i += 1; continue; }
@@ -189,6 +228,8 @@ function relationRuns(text) {
       break;
     }
     if (i === body0) return start; // a lone currency/sign with no number body → not an operand
+    // a function call: an identifier immediately followed by balanced parens — "f(x)", "sin(θ)"
+    if (ch(i) === '(') { const close = matchParenRight(i); if (close > i) i = close; }
     while (i < len && isSuffix(ch(i))) i += 1; // trailing suffix(es): %, °, currency
     return i;
   }

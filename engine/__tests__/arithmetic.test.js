@@ -92,7 +92,18 @@ test('arithmetic: a non-numeric run carries no digit and is never isolated', () 
   assert.deepEqual(runs('state-of-the-art'), []);
   assert.deepEqual(runs('and/or maybe'), []);
   assert.deepEqual(runs('TCP/IP protocol'), []);
-  assert.deepEqual(runs('f(3) = 5'), []);                // ")" blocks the operand of "="
+  assert.deepEqual(runs('f(x) = y'), []);                // a function call but NO digit → no reorder
+});
+test('arithmetic: parenthesised sub-expressions and function calls are captured whole', () => {
+  assert.deepEqual(runs('(3 × 5) + 2 = 17'), ['(3 × 5) + 2 = 17']); // the reported bug
+  assert.deepEqual(runs('2 × (3 + 4) = 14'), ['2 × (3 + 4) = 14']);
+  assert.deepEqual(runs('((1 + 2) × 3) = 9'), ['((1 + 2) × 3) = 9']); // nested
+  assert.deepEqual(runs('f(3) = 5'), ['f(3) = 5']);                  // function call, has a digit
+  assert.deepEqual(runs('f(x) + g(x) = 0'), ['f(x) + g(x) = 0']);
+  assert.deepEqual(runs('חישוב: (3 × 5) + 2 = 17 בדיוק'), ['(3 × 5) + 2 = 17']);
+  // a parenthesised group that is NOT math (Hebrew/prose) is left alone
+  assert.deepEqual(runs('(הערה) בעברית כאן'), []);
+  assert.deepEqual(runs('see the (note) above'), []);
 });
 
 // ─────────────────────────── boundaries: period, comma, prose ───────────────────────────
