@@ -52,6 +52,16 @@ test('corners: norm ‖x‖ pairs like the absolute-value bar', () => {
   assert.deepEqual(runs('המרחק ‖u − v‖ < ε כאן'), ['‖u − v‖ < ε']);
 });
 
+// ─────────────────────────── symmetric (non-mirrored) relations ───────────────────────────
+test('corners: ≡ ∼ ≃ ≜ reorder weak operands like "=" (the mirror seed misses them)', () => {
+  assert.deepEqual(runs('המספרים 17 ≡ 2 (mod 5) כאן'), ['17 ≡ 2']); // congruence reorders the digits
+  assert.deepEqual(runs('x ≜ y + 1 כאן'), ['x ≜ y + 1']);            // "defined as", has a digit
+  assert.deepEqual(runs('כי 3 ≃ 3.0 בקירוב'), ['3 ≃ 3.0']);
+  // between letters (or a letter + one digit) there is no reorder → left alone / harmless
+  assert.deepEqual(runs('a ≡ b (mod n)'), []);
+  assert.deepEqual(runs('P ≡ Q logically'), []);
+});
+
 // ─────────────────────────── the DOM gate covers these ───────────────────────────
 test('corners: hasMathRun passes a bracket+operator group (and a bare paren stays out)', () => {
   assert.equal(hasMathRun('(a+b)² = c'), true);   // bracket + operator

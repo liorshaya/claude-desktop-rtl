@@ -201,7 +201,7 @@ test('operands: a relation with no operand on a side stays minimal', () => {
 // ─────────────────────────────── things that must NOT trigger ───────────────────────────────
 test('operands: brackets / arrows / prose are not isolated, but numeric arithmetic IS', () => {
   assert.deepEqual(runs('f(x) = y'), []);          // a function call but no digit → no reorder
-  assert.deepEqual(runs('n ≡ 0 (mod 2)'), []);     // ≡ is symmetric — not an operator we seed
+  assert.deepEqual(runs('a ≡ b (mod n)'), []);     // ≡ between letters → no reorder (digits DO: see math-corners)
   assert.deepEqual(runs('[a] {b} (c)'), []);        // brackets only
   assert.deepEqual(runs('a → b ⇒ c'), []);          // arrows (handled elsewhere)
   assert.deepEqual(runs('שלום עולם'), []);

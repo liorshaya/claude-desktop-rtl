@@ -120,7 +120,15 @@ function isArithOp(cp) {
   return cp === 0x2b /* + */ || cp === 0x2d /* - */ || cp === 0x2212 /* − */ ||
     cp === 0xd7 /* × */ || cp === 0xf7 /* ÷ */ || cp === 0x3d /* = */ || cp === 0xb7 /* · */ ||
     cp === 0x2217 /* ∗ */ || cp === 0x22c5 /* ⋅ */ || cp === 0xb1 /* ± */ || cp === 0x2213 /* ∓ */ ||
-    cp === 0x2a /* * */ || cp === 0x2f /* / */;
+    cp === 0x2a /* * */ || cp === 0x2f /* / */ || isSymRel(cp);
+}
+// SYMMETRIC relations that are NOT Bidi_Mirrored (their glyph is fine in RTL) but, like '=', REORDER
+// weak operands — "17 ≡ 2 (mod 5)" renders "2 ≡ 17". The mirror seed already covers the mirrored
+// relations (< ≤ ∈ ≠ ≈ ≅ …); this is the equality/congruence family it misses: ≡ ∼ ≃ ≐ ≜ ≝ ≑ ≒.
+function isSymRel(cp) {
+  return cp === 0x2261 /* ≡ */ || cp === 0x223c /* ∼ */ || cp === 0x2243 /* ≃ */ ||
+    cp === 0x2250 /* ≐ */ || cp === 0x225c /* ≜ */ || cp === 0x225d /* ≝ */ ||
+    cp === 0x2251 /* ≑ */ || cp === 0x2252 /* ≒ */;
 }
 // BINARY set operators ∩ ∪ ∖ ⊎ ⊓ ⊔ — symmetric (NOT Bidi_Mirrored), but they chain set operands
 // and, like arithmetic, an all-weak run reorders ("A ∩ B = ∅" → "∅ = B ∩ A"). They seed/chain only
