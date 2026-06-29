@@ -173,3 +173,20 @@ blockquote[dir="rtl"] {
 [data-ask-user-input-banner][dir="rtl"] .group\/row {
   text-align: start;
 }
+
+/* The pagination cluster ("‹ 1 of 3 ›") is a fixed LTR control. JS stamps the cluster
+ * data-rtl-ltr (content-derived: an LTR digit run outside the options); isolating it LTR keeps
+ * the counter readable ("1 of 3", not "of 3 1") AND the prev/next chevrons pointing outward,
+ * instead of the root dir="rtl" cascading direction:rtl into it. */
+[data-ask-user-input-banner][dir="rtl"] [data-rtl-ltr] {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+/* The per-option "→" affordance mirrors under RTL: JS stamps the existing decorative span
+ * data-rtl-arrow, reusing the global [data-rtl-arrow] scaleX(-1) flip (glyph untouched). scaleX
+ * mirrors only the glyph, so also move the physical Tailwind margin (mr-2) to the logical side. */
+[data-ask-user-input-banner][dir="rtl"] [data-rtl-arrow] {
+  margin-right: 0; /* drop the physical Tailwind mr-2 … */
+  margin-left: 0.5rem; /* … and add the gap on the arrow's now-OUTER (visual-left) edge */
+}

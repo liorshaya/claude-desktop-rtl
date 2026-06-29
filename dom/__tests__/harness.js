@@ -78,6 +78,7 @@ class MElement {
     this.style = { setProperty(k, v) { map[k] = v; }, getPropertyValue(k) { return map[k] || ''; } };
   }
   get parentElement() { return this.parentNode && this.parentNode.nodeType === 1 ? this.parentNode : null; }
+  get childElementCount() { return this.childNodes.filter((n) => n.nodeType === 1).length; }
   getAttribute(n) { return n in this.attrs ? this.attrs[n] : null; }
   setAttribute(n, v) { this.attrs[n] = String(v); }
   hasAttribute(n) { return n in this.attrs; }
@@ -88,6 +89,14 @@ class MElement {
     child.parentNode = this; this.childNodes.push(child); return child;
   }
   removeChild(child) { const i = this.childNodes.indexOf(child); if (i !== -1) { this.childNodes.splice(i, 1); child.parentNode = null; } return child; }
+  insertBefore(newNode, ref) {
+    if (newNode.parentNode) newNode.parentNode.removeChild(newNode);
+    newNode.parentNode = this;
+    const i = ref ? this.childNodes.indexOf(ref) : -1;
+    if (i === -1) this.childNodes.push(newNode);
+    else this.childNodes.splice(i, 0, newNode);
+    return newNode;
+  }
   replaceChild(newNode, oldNode) {
     const i = this.childNodes.indexOf(oldNode); if (i === -1) return oldNode;
     const nodes = newNode && newNode.__fragment ? newNode.childNodes.slice() : [newNode];

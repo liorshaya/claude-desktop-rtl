@@ -198,13 +198,87 @@ function processAskWidget(widget) {
   if (widget.closest('pre, code')) return;
   const lb = widget.querySelector(SELECTORS.askQuestion);
   const question = (lb && lb.getAttribute('aria-label')) || proseText(widget);
-  if (resolvedDir(question) === 'rtl') {
-    if (widget.getAttribute('dir') !== 'rtl') widget.setAttribute('dir', 'rtl');
-  } else if (widget.getAttribute('dir') === 'rtl') {
-    widget.removeAttribute('dir'); // a prior RTL question paged to an LTR one → restore
-  }
+  const rtl = resolvedDir(question) === 'rtl';
+  if (rtl && widget.getAttribute('dir') !== 'rtl') widget.setAttribute('dir', 'rtl');
+  if (!rtl && widget.getAttribute('dir') === 'rtl') widget.removeAttribute('dir');
+  styleAskAffordances(widget, rtl);
   const input = widget.querySelector('input');
   if (input) setInputDir(input);
+}
+
+// §6/§8.F — the widget's directional AFFORDANCES, fixed ATTRIBUTE-ONLY (stamp existing nodes,
+// never inject — React owns this DOM) and re-applied/cleared EVERY pass (the widget is never
+// DONE-stamped) so the stamps survive React stripping and remount-on-pagination:
+//   • Per-option "→" must mirror to "←" in RTL. We stamp the existing decorative (aria-hidden)
+//     span that holds a single mirror-arrow glyph with data-rtl-arrow, reusing the scaleX(-1)
+//     CSS. Glyph-detected via the engine (isMirrorArrow), so it's immune to class/markup churn.
+//   • The pagination counter ("1 of 3") is a fixed LTR control that RTL scrambles to "of 3 1"
+//     (and points the nav chevrons inward). We isolate its whole cluster LTR via data-rtl-ltr —
+//     content-derived (an LTR run with a digit, outside the option list), so no Tailwind-class
+//     dependency. A Hebrew counter ("1 מתוך 3") is already RTL-correct, so resolvedDir skips it.
+// Loop-safe: the observer watches childList/characterData only (never attributes), so these
+// stamps never feed it back.
+function styleAskAffordances(widget, rtl) {
+  // (1) Per-option "→": collect the decorative single-arrow spans that SHOULD mirror in RTL.
+  const toMirror = [];
+  if (rtl) {
+    const options = qsa(SELECTORS.askOption, widget);
+    for (let i = 0; i < options.length; i++) {
+      const decos = qsa('[aria-hidden="true"]', options[i]);
+      for (let j = 0; j < decos.length; j++) {
+        if (isMirrorArrowGlyph(decos[j].textContent || '')) toMirror.push(decos[j]);
+      }
+    }
+  }
+  // Clear the stamp WIDGET-WIDE (not just current [role="option"] descendants) so an orphan can't
+  // survive a remount that drops the option's role; then stamp the current set. (The global
+  // [data-rtl-arrow] scaleX rule is unconditional, so a stale stamp would stay visually flipped.)
+  syncStamp(qsa('[data-rtl-arrow]', widget), toMirror, 'data-rtl-arrow');
+
+  // (2) Pagination counter ("1 of 3"): isolate its whole cluster LTR so RTL neither scrambles the
+  // counter to "of 3 1" nor points the nav chevrons inward.
+  const counter = rtl ? findAskCounter(widget) : null;
+  let cluster = counter && counter.parentElement; // the prev/counter/next group
+  if (cluster === widget) cluster = counter; // never the root (the descendant-combinator CSS skips it)
+  // Defense in depth: never isolate a cluster whose own text is majority-RTL — that would force the
+  // Hebrew question/options LTR (the version-badge false-positive). The counter shape gates this too.
+  if (cluster && resolvedDir(proseText(cluster)) === 'rtl') cluster = null;
+  syncStamp(qsa('[data-rtl-ltr]', widget), cluster ? [cluster] : [], 'data-rtl-ltr');
+}
+
+// Make exactly `keep` carry `attr` among `current` (the existing carriers) — idempotent, no churn.
+function syncStamp(current, keep, attr) {
+  for (let i = 0; i < current.length; i++) {
+    if (keep.indexOf(current[i]) === -1) current[i].removeAttribute(attr);
+  }
+  for (let i = 0; i < keep.length; i++) {
+    if (!keep[i].hasAttribute(attr)) keep[i].setAttribute(attr, '');
+  }
+}
+
+// A single decorative mirror-arrow GLYPH ("→", "⬅", and emoji-presentation "⬅️" = arrow+VS16).
+// Tolerates a trailing variation selector so an emoji-form arrow still mirrors; rejects multi-char
+// runs ("→ go") and non-arrows ("⌄"). Glyph-derived via the engine, so immune to class/markup churn.
+function isMirrorArrowGlyph(t) {
+  const cps = Array.from(t).filter((c) => c !== '\uFE0E' && c !== '\uFE0F'); // drop text/emoji VS
+  return cps.length === 1 && isMirrorArrow(cps[0].codePointAt(0));
+}
+
+// The pagination counter: a LEAF span OUTSIDE the option list whose text is PAGINATION-SHAPED — two
+// digit groups around an "of"/"/" separator ("1 of 3", "2/5"). Shape-matched (not merely "has a
+// digit") so a Latin+digit badge in the header ("v2", "GPT-4", "Claude 3.5") is never mistaken for
+// the counter and its cluster — possibly the whole header, incl. the Hebrew question — wrongly
+// isolated LTR. A Hebrew counter ("1 מתוך 3") doesn't match (and is already RTL-correct).
+const COUNTER_RE = /^[0-9٠-٩۰-۹]+\s*(?:of|\/)\s*[0-9٠-٩۰-۹]+$/i;
+function findAskCounter(widget) {
+  const spans = qsa('span', widget);
+  for (let i = 0; i < spans.length; i++) {
+    const s = spans[i];
+    if (s.childElementCount) continue; // leaf text only
+    if (s.closest(SELECTORS.askOption + ', ' + SELECTORS.askQuestion)) continue; // header/nav, not the list
+    if (COUNTER_RE.test((s.textContent || '').trim())) return s;
+  }
+  return null;
 }
 
 // §8.F — visually mirror arrows inside RTL blocks by wrapping each in <span
@@ -553,16 +627,25 @@ function makeObserver(doc) {
   };
 
   const observer = new MutationObserver((mutations) => {
+    const widgets = new Set(); // ask-widgets touched this batch — re-asserted SYNCHRONOUSLY below
     for (const m of mutations) {
       // Inputs are handled SYNCHRONOUSLY (no debounce) so a freshly-opened edit box is
       // dir="auto" before its first paint — the table/island pass stays deferred.
       for (let i = 0; i < m.addedNodes.length; i++) processAdded(m.addedNodes[i]);
       const target = m.target && m.target.nodeType === 1 ? m.target : doc.body;
+      // An ask-widget paginating between questions MUTATES its existing subtree (not an added
+      // node), so the debounced pass would re-apply dir + the arrow/counter stamps ~250ms late —
+      // a visible LTR→RTL flash and an arrow that only flips after you navigate. Re-assert the
+      // enclosing widget SYNCHRONOUSLY (in this pre-paint microtask) so it's stable every render.
+      const el = m.target && (m.target.nodeType === 1 ? m.target : m.target.parentElement);
+      const w = el && el.closest && el.closest(SELECTORS.askWidget);
+      if (w) widgets.add(w);
       // Scope to the nearest chat message root when we can; else the mutating subtree (so
       // a RENDERED artifact panel still gets RTL). Source/code views are skipped per-pass.
       const root = (target.closest && target.closest(SELECTORS.messageRoot)) || target;
       pending.add(root);
     }
+    for (const w of widgets) processAskWidget(w);
     schedule();
   });
 
