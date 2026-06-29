@@ -161,3 +161,15 @@ blockquote[dir="rtl"] {
   padding-left: 0 !important;
   padding-right: 2rem !important;
 }
+
+/* §6 — the "ask user a question" widget. When its question is RTL, JS sets dir="rtl" on the
+ * [data-ask-user-input-banner] root; the global [dir="rtl"] rule above gives it
+ * `direction: rtl`, which flips the flex rows (number badge → right, nav → left). Claude
+ * hard-aligns the rows with a PHYSICAL Tailwind `text-align: left` (.text-left), so re-assert
+ * logical `start` on the question and the option / "Something else" rows so the labels hug the
+ * reading (right) edge. Attribute-scoped: an LTR-question widget keeps Claude's layout (§8.K). */
+[data-ask-user-input-banner][dir="rtl"],
+[data-ask-user-input-banner][dir="rtl"] [role="option"],
+[data-ask-user-input-banner][dir="rtl"] .group\/row {
+  text-align: start;
+}

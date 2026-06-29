@@ -39,7 +39,25 @@ const SELECTORS = {
   // Headings/paragraphs where CSS `plaintext` first-strong can misfire on a Latin/marker
   // opener of a Hebrew block ("8c. בדיקה…", "React הוא…"); we override only then (§3.2/§8.K).
   proseDir: 'p, h1, h2, h3, h4, h5, h6',
+  // The interactive "ask user a question" widget (claude.ai + Desktop): a React-managed
+  // popup — a question + numbered options + a free-text "Something else" input. Stable
+  // data-attr root; `askQuestion` (role=listbox) carries the question as its aria-label. We
+  // give the WHOLE widget a content-derived base direction from its question, exactly like a
+  // <table> takes dir from its cells (§3.2) — a Hebrew question reads RTL (badge → right,
+  // label right-aligned, nav → left, all via the flex `direction`); an English question stays
+  // LTR (§8.K, no blanket container flip). React owns this DOM, so we set ATTRIBUTES only and
+  // never inject spans into it (it's in `noInject`, below).
+  askWidget: '[data-ask-user-input-banner]',
+  askQuestion: '[role="listbox"]',
 };
+
+// Span-injecting passes (relations/arrows/signed-numbers) must NEVER restructure these:
+//  • <style>/<script> hold CODE, not display text — injecting a <span> corrupts the sheet
+//    (observed: a data-rtl-relation span landed inside the ask-widget's @keyframes).
+//  • the composer / edit box and the React-managed ask-widget desync if we add child nodes
+//    (cf. SELECTORS.editableHost and the "-5" typing freeze).
+// Attribute-only passes (dir tagging) are unaffected; they have their own narrower guards.
+SELECTORS.noInject = 'style, script, ' + SELECTORS.askWidget + ', ' + SELECTORS.editableHost;
 
 function qsa(selector, root) {
   if (!root || typeof root.querySelectorAll !== 'function') return [];
@@ -75,6 +93,10 @@ function findProseDirBlocks(root) {
   return qsa(SELECTORS.proseDir, root);
 }
 
+function findAskWidgets(root) {
+  return qsa(SELECTORS.askWidget, root);
+}
+
 // Read a <table> as plain text for the engine (§3.2): the header row (the column-order
 // tie-break) and EVERY cell (drives the majority column-order decision in tableDir).
 // Returns { headers, allCells }.
@@ -88,6 +110,6 @@ function readTableShape(table) {
 // __EXPORTS__ (everything below is stripped when inlined into the browser payload)
 const api = {
   SELECTORS, qsa, findInputs, findMessageRoots, findTables, findCodeBlocks,
-  findLeafBlocks, findDirBlocks, findProseDirBlocks, readTableShape,
+  findLeafBlocks, findDirBlocks, findProseDirBlocks, findAskWidgets, readTableShape,
 };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;

@@ -77,6 +77,14 @@ function inEditable(el) {
   return !!(el && el.closest && el.closest(SELECTORS.editableHost));
 }
 
+// True if `el` is inside a zone where we must NOT inject <span> wrappers (relations/arrows/
+// signed-numbers): a <style>/<script> (injecting there corrupts the stylesheet) or a
+// React-managed surface — the composer/edit box and the ask-widget — which desyncs if we
+// add child nodes. Attribute-only passes don't use this (they have narrower guards). (§6)
+function inNoInject(el) {
+  return !!(el && el.closest && el.closest(SELECTORS.noInject));
+}
+
 // Apply dir="auto" to a freshly-added node and any inputs inside it. Called synchronously
 // from the observer so an edit box is dir="auto" BEFORE its first paint — no visible
 // LTR→RTL flip. dir="auto" is live, so even a box that mounts empty then fills with
@@ -108,6 +116,11 @@ function processAdded(node) {
   if (node.matches && node.matches(SELECTORS.proseDir)) processProseDir(node);
   const proseBlocks = node.querySelectorAll ? node.querySelectorAll(SELECTORS.proseDir) : [];
   for (let i = 0; i < proseBlocks.length && i < MAX_NODES_PER_PASS; i++) processProseDir(proseBlocks[i]);
+  // The ask-widget too, SYNCHRONOUSLY — so a Hebrew question popup is RTL on first paint with
+  // no LTR→RTL flip (it mounts complete, like a table).
+  if (node.matches && node.matches(SELECTORS.askWidget)) processAskWidget(node);
+  const askWidgets = node.querySelectorAll ? node.querySelectorAll(SELECTORS.askWidget) : [];
+  for (let i = 0; i < askWidgets.length && i < MAX_NODES_PER_PASS; i++) processAskWidget(askWidgets[i]);
 }
 
 // Tables have TWO independent layers (§3.2). Layer 1: column-ORDER — flip the <table>'s
@@ -172,6 +185,28 @@ function processCodeBlock(pre) {
   pre.setAttribute(DONE_ATTR, '1');
 }
 
+// §6 — the interactive "ask user a question" widget. Give it a content-derived base direction
+// from its QUESTION (the listbox aria-label, falling back to the widget's own text), exactly
+// like a <table> takes dir from its cells (§3.2): a Hebrew question → dir="rtl" on the root,
+// which flips the option rows (number badge → right, label → reading edge, nav → left) and
+// right-aligns the text via the [data-ask-user-input-banner][dir="rtl"] CSS. An English
+// question stays LTR (resolvedDir ≠ 'rtl') — no blanket container flip (§8.K). The free-text
+// "Something else" <input> gets dir="auto" so it follows what's typed. ATTRIBUTES only: React
+// owns this DOM, so we never inject spans (it's in `noInject`). NOT stamped DONE — the widget
+// re-renders across questions ("1 of 3" → "2 of 3"), so we re-evaluate and can restore LTR.
+function processAskWidget(widget) {
+  if (widget.closest('pre, code')) return;
+  const lb = widget.querySelector(SELECTORS.askQuestion);
+  const question = (lb && lb.getAttribute('aria-label')) || proseText(widget);
+  if (resolvedDir(question) === 'rtl') {
+    if (widget.getAttribute('dir') !== 'rtl') widget.setAttribute('dir', 'rtl');
+  } else if (widget.getAttribute('dir') === 'rtl') {
+    widget.removeAttribute('dir'); // a prior RTL question paged to an LTR one → restore
+  }
+  const input = widget.querySelector('input');
+  if (input) setInputDir(input);
+}
+
 // §8.F — visually mirror arrows inside RTL blocks by wrapping each in <span
 // data-rtl-arrow>; CSS does the flip. The character is preserved exactly, so copy/Ctrl-F
 // are byte-for-byte (§3.6 hard rule). Only RTL blocks are touched, and each block is
@@ -200,7 +235,7 @@ function inLtrIsland(node) {
 }
 
 function wrapArrowsInBlock(block) {
-  if (inEditable(block)) return; // never mutate the composer / edit box (freezes typing)
+  if (inNoInject(block)) return; // never inject into composer/edit box, ask-widget, <style>
   if (block.getAttribute(ARROWS_ATTR) === '1') return;
   block.setAttribute(ARROWS_ATTR, '1');
   if (!hasMirrorArrow(block.textContent || '')) return;
@@ -273,8 +308,8 @@ function wrapRelationsUnder(root) {
       const p = n.parentNode;
       if (p && p.hasAttribute && p.hasAttribute('data-rtl-relation')) return NodeFilter.FILTER_REJECT;
       if (inLtrIsland(n)) return NodeFilter.FILTER_REJECT; // rendered math/code already LTR
-      if (p && p.closest && p.closest('pre, code, ' + SELECTORS.editableHost)) {
-        return NodeFilter.FILTER_REJECT; // never touch source views or the input box
+      if (p && p.closest && p.closest('pre, code, ' + SELECTORS.noInject)) {
+        return NodeFilter.FILTER_REJECT; // source views, input box, ask-widget, <style>/<script>
       }
       return NodeFilter.FILTER_ACCEPT;
     },
@@ -316,7 +351,7 @@ function splitRelations(node) {
 // Skips rendered math/code islands; only RTL blocks are walked; stamped per block.
 const NUMS_ATTR = 'data-rtl-nums';
 function wrapSignedNumbersInBlock(block) {
-  if (inEditable(block)) return; // never mutate the composer / edit box (the "-5" freeze)
+  if (inNoInject(block)) return; // never inject into composer/edit box, ask-widget, <style>
   if (block.getAttribute(NUMS_ATTR) === '1') return;
   block.setAttribute(NUMS_ATTR, '1');
   if (!signedNumberRuns(block.textContent || '').length) return;
@@ -476,6 +511,9 @@ function processRoot(root) {
   for (let i = 0; i < proseBlocks.length && i < MAX_NODES_PER_PASS; i++) processProseDir(proseBlocks[i]);
   const codeBlocks = findCodeBlocks(root);
   for (let i = 0; i < codeBlocks.length && i < MAX_NODES_PER_PASS; i++) processCodeBlock(codeBlocks[i]);
+  if (root.matches && root.matches(SELECTORS.askWidget)) processAskWidget(root);
+  const askWidgets = findAskWidgets(root);
+  for (let i = 0; i < askWidgets.length && i < MAX_NODES_PER_PASS; i++) processAskWidget(askWidgets[i]);
   // Relations isolate the whole comparison EXPRESSION and are direction-independent, so they
   // run over the ENTIRE root (not just prose leaves) — this is what reaches a standalone
   // equation living in a non-`<p>` container. Arrows (flip only in RTL) and signed numbers stay
