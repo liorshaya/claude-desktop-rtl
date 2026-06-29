@@ -35,9 +35,24 @@ jobs:
           if-no-files-found: error
 
   build-macos:
-    runs-on: macos-latest
+    # macOS 26 runner → SDK 26, so the menu-bar panel adopts the Liquid Glass design (rounded,
+    # flush). `macos-latest` can still resolve to macOS 15 (SDK 15), which builds the app against
+    # the OLD SDK and ships the LEGACY square chrome with a sizing gap on macOS 26 — the regression
+    # that shipped in the v0.2.13 .dmg. Liquid Glass is a BUILD-SDK opt-in, independent of the
+    # deployment target (kept at macOS 13), so the SDK the runner builds against is the whole fix.
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
+      - name: Pin & verify the macOS 26 SDK (Liquid Glass — fail loud if missing)
+        run: |
+          # Build against the newest Xcode on the runner, then HARD-FAIL if its SDK is < 26 — so a
+          # future runner-image change can never silently regress the chrome back to square again.
+          XC="$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)"
+          [ -n "$XC" ] && sudo xcode-select -s "$XC"
+          echo "Active developer dir: $(xcode-select -p)"
+          SDK="$(xcrun --sdk macosx --show-sdk-version)"
+          echo "macOS SDK: $SDK"
+          [ "${SDK%%.*}" -ge 26 ] || { echo "::error::macOS SDK $SDK < 26 — the .app would ship legacy square chrome, not Liquid Glass"; exit 1; }
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
