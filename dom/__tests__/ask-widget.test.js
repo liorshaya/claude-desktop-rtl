@@ -400,6 +400,26 @@ test('paginating RTL → neutral → RTL clears then re-applies every affordance
   assert.ok(w.querySelector('[data-rtl-arrow]') && w.querySelector('[data-rtl-ltr]'), 'RTL again: re-stamped');
 });
 
+test('the "Something else" row is DECOUPLED to dir="auto" under RTL (stays put, not flipped)', () => {
+  const w = askWidget(QUESTION_HE, OPTIONS_HE);
+  renderedHost(w);
+  I.processAskWidget(w);
+  const input = w.querySelector('input');
+  assert.equal(input.getAttribute('dir'), 'auto', 'the input follows typed content (Hebrew right / English left)');
+  assert.equal(input.parentElement.getAttribute('dir'), 'auto', 'the row is dir=auto — its natural (LTR) layout, not flipped by the widget RTL');
+});
+
+test('the "Something else" decoupling is cleared when the widget goes LTR (no stale dir)', () => {
+  const w = askWidget(QUESTION_HE, OPTIONS_HE);
+  renderedHost(w);
+  I.processAskWidget(w);
+  const row = w.querySelector('input').parentElement;
+  assert.equal(row.getAttribute('dir'), 'auto', 'RTL: row decoupled');
+  w.querySelector('[role="listbox"]').setAttribute('aria-label', QUESTION_EN);
+  I.processAskWidget(w);
+  assert.equal(row.getAttribute('dir'), null, 'LTR widget: row dir cleared, reverts to natural');
+});
+
 test('a whitespace-only aria-label falls back to the visible body question (RTL)', () => {
   const w = askWidget(QUESTION_HE, OPTIONS_HE);
   w.querySelector('[role="listbox"]').setAttribute('aria-label', '   '); // blank, not empty

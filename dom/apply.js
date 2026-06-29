@@ -205,7 +205,18 @@ function processAskWidget(widget) {
   if (!rtl && widget.getAttribute('dir') === 'rtl') widget.removeAttribute('dir');
   styleAskAffordances(widget, rtl);
   const input = widget.querySelector('input');
-  if (input) setInputDir(input);
+  if (input) {
+    setInputDir(input); // the input itself follows what's typed (Hebrew → right, English → left)
+    // Keep the free-text "Something else" ROW in its OWN content direction instead of letting the
+    // widget's dir="rtl" flip it — Skip/pencil were swapping sides on every paginate (the reported
+    // jump). dir="auto" → the English placeholder/Skip render LTR ("the regular") and stay put;
+    // typed Hebrew still right-aligns inside the input. Re-applied/cleared each pass; never the root.
+    const row = input.parentElement;
+    if (row && row !== widget) {
+      if (rtl && row.getAttribute('dir') !== 'auto') row.setAttribute('dir', 'auto');
+      else if (!rtl && row.getAttribute('dir') === 'auto') row.removeAttribute('dir');
+    }
+  }
 }
 
 // §6/§8.F — the widget's directional AFFORDANCES, fixed ATTRIBUTE-ONLY (stamp existing nodes,
