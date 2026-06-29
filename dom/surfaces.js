@@ -35,7 +35,7 @@ const SELECTORS = {
   // signed number / arrow or flipping a list's dir there desyncs the editor and FREEZES
   // typing (the "-5" composer bug). The ONLY thing we ever set on these is dir="auto"
   // (sweepInputs, §5/§6).
-  editableHost: '[contenteditable="true"], [contenteditable=""], .ProseMirror, textarea',
+  editableHost: '[contenteditable="true"], [contenteditable=""], [contenteditable="plaintext-only"], .ProseMirror, textarea',
   // Headings/paragraphs where CSS `plaintext` first-strong can misfire on a Latin/marker
   // opener of a Hebrew block ("8c. בדיקה…", "React הוא…"); we override only then (§3.2/§8.K).
   proseDir: 'p, h1, h2, h3, h4, h5, h6',
@@ -49,6 +49,7 @@ const SELECTORS = {
   // never inject spans into it (it's in `noInject`, below).
   askWidget: '[data-ask-user-input-banner]',
   askQuestion: '[role="listbox"]',
+  askOption: '[role="option"]',
 };
 
 // Span-injecting passes (relations/arrows/signed-numbers) must NEVER restructure these:

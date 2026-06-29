@@ -258,3 +258,56 @@ test('kitchen-sink RTL line: inert in composer, fully transformed when rendered'
   assert.ok(rp.querySelector('[data-rtl-arrow]'), 'rendered: arrow flipped');
   assert.equal(rp.textContent, txt, 'rendered: text still byte-for-byte (no control chars)');
 });
+
+// ---- rare editable variants (pre-merge exhaustive sweep) ----------------------------------
+test('contenteditable="plaintext-only" is guarded like the composer (no "-5" freeze)', () => {
+  const p = el('p', null, ['המחיר -5 שקל']);
+  el('div', { contenteditable: 'plaintext-only' }, [p]);
+  assert.equal(I.inEditable(p), true, 'plaintext-only is an editable host');
+  I.wrapSignedNumbersInBlock(p);
+  assert.equal(p.querySelector('[data-rtl-num]'), null, 'no signed-number wrap inside a plaintext-only editor');
+  I.processProseDir(p);
+  assert.equal(p.getAttribute('dir'), null, 'no dir stamped inside a plaintext-only editor');
+});
+
+test('a relation typed in the in-place edit box is never isolated (no wrapper injected)', () => {
+  const p = el('p', null, ['האם 3 < 5 נכון']);
+  const root = renderedHost(el('div', { contenteditable: 'true', class: 'ProseMirror' }, [p]));
+  I.processRoot(root); // root is the message root containing the edit box
+  assert.equal(p.querySelector('[data-rtl-relation]'), null, 'relation pass skips the editable (noInject)');
+  assert.equal(elementChildren(p).length, 0, 'edit-box paragraph untouched');
+});
+
+test('a NESTED editable (editable within editable) is still fully guarded', () => {
+  const p = el('p', null, ['טמפ -5 ואז 3 < 5']);
+  const inner = el('div', { contenteditable: 'true' }, [p]);
+  el('div', { contenteditable: 'true', class: 'ProseMirror' }, [inner]);
+  I.wrapSignedNumbersInBlock(p);
+  I.wrapArrowsInBlock(p);
+  assert.equal(elementChildren(p).length, 0, 'nested editable: nothing wrapped');
+});
+
+test('a composer that ALSO matches a messageRoot class (.prose) still early-returns', () => {
+  const p = el('p', null, ['טמפ -5']);
+  // some Claude versions put .prose on the contenteditable itself
+  const composer = el('div', { contenteditable: 'true', class: 'ProseMirror prose' }, [p]);
+  I.processRoot(composer);
+  assert.equal(p.querySelector('[data-rtl-num]'), null, 'still treated as an input surface, not prose');
+  assert.equal(elementChildren(p).length, 0, 'composer paragraph untouched');
+});
+
+test('a leaf deep under a BARE .ProseMirror (no contenteditable attr) is still spared', () => {
+  const p = el('p', null, ['מחיר -5']);
+  el('div', { class: 'ProseMirror' }, [el('div', null, [el('div', null, [el('div', null, [p])])])]);
+  assert.equal(I.inEditable(p), true, 'bare .ProseMirror is an editable host; closest climbs any depth');
+  I.wrapSignedNumbersInBlock(p);
+  assert.equal(p.querySelector('[data-rtl-num]'), null, 'spared even nested 3 levels deep');
+});
+
+test('a <textarea> whose value text is relation-shaped is never injected into', () => {
+  const ta = el('textarea', null, ['3 < 5']);
+  const root = renderedHost(ta);
+  I.wrapRelationsUnder(root);
+  assert.equal(ta.querySelector('[data-rtl-relation]'), null, 'textarea content untouched (noInject)');
+  assert.equal(ta.childNodes.length, 1, 'textarea text node left whole');
+});

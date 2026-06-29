@@ -271,6 +271,166 @@ test('processAdded flips a freshly-mounted Hebrew widget RTL synchronously (no f
   assert.equal(w.getAttribute('dir'), 'rtl', 'RTL on first paint');
 });
 
+// ---- rare edge cases (pre-merge exhaustive sweep) -----------------------------------------
+const counterSpanOf = (w) => w.querySelectorAll('span').find((s) => COUNTER_LIKE.test((s.textContent || '').trim()));
+const COUNTER_LIKE = /^[0-9٠-٩۰-۹]+\s*(?:of|\/)\s*[0-9٠-٩۰-۹]+$/i;
+
+for (const [lang, q, opts] of [
+  ['Arabic', 'ما هو أول شيء تفعله في الصباح؟', ['قهوة', 'الهاتف']],
+  ['Persian', 'اولین کاری که صبح انجام می‌دهی چیست؟', ['قهوه', 'تلفن']],
+]) {
+  test(`a ${lang} (RTL) question flips the widget dir="rtl"`, () => {
+    const w = askWidget(q, opts);
+    renderedHost(w);
+    I.processAskWidget(w);
+    assert.equal(w.getAttribute('dir'), 'rtl', `${lang} question → RTL`);
+  });
+}
+
+for (const neutral of ['?!', '123', '— • —', '→ ← →']) {
+  test(`a NEUTRAL question (${JSON.stringify(neutral)}) never flips the widget (resolvedDir null, §8.K)`, () => {
+    const w = askWidget(neutral, ['a', 'b']);
+    renderedHost(w);
+    I.processAskWidget(w);
+    assert.equal(w.getAttribute('dir'), null, 'neutral question stays LTR — no blanket flip');
+    assert.equal(w.querySelector('[data-rtl-ltr]'), null, 'and no counter isolation');
+  });
+}
+
+test('an English-majority question with embedded Hebrew stays LTR (§8.K)', () => {
+  const w = askWidget('hello עולם what next', ['x', 'y']);
+  renderedHost(w);
+  I.processAskWidget(w);
+  assert.equal(w.getAttribute('dir'), null, 'majority-English question is never flipped');
+});
+
+// LTR-resolving counters scramble under RTL ("1 of 3" → "of 3 1") → isolate them.
+for (const counter of ['10 of 20', '1/3']) {
+  test(`an LTR pagination counter (${JSON.stringify(counter)}) is isolated LTR`, () => {
+    const w = askWidget(QUESTION_HE, OPTIONS_HE);
+    counterSpanOf(w).textContent = counter;
+    renderedHost(w);
+    I.processAskWidget(w);
+    const stamped = w.querySelectorAll('[data-rtl-ltr]');
+    assert.equal(stamped.length, 1, 'the counter cluster is isolated');
+    assert.ok((stamped[0].textContent || '').includes(counter), 'on the right cluster');
+  });
+}
+
+// A counter that is ITSELF RTL (Arabic-Indic / Persian digits → resolvedDir 'rtl') does not
+// scramble, so the cluster-RTL guard correctly leaves it alone — we never force RTL content LTR.
+for (const counter of ['١ of ٣', '۱ / ۳']) {
+  test(`an RTL-resolving counter (${JSON.stringify(counter)}) is NOT force-isolated LTR`, () => {
+    const w = askWidget(QUESTION_HE, OPTIONS_HE);
+    counterSpanOf(w).textContent = counter;
+    renderedHost(w);
+    I.processAskWidget(w);
+    assert.equal(w.querySelector('[data-rtl-ltr]'), null, 'an RTL counter is left alone (no LTR force on RTL content)');
+  });
+}
+
+for (const glyph of ['←', '⇒', '↔', '⬅', '➡']) {
+  test(`a non-"→" decorative arrow (${glyph}) still mirrors`, () => {
+    const w = askWidget(QUESTION_HE, OPTIONS_HE);
+    arrowSpan(w).textContent = glyph;
+    renderedHost(w);
+    I.processAskWidget(w);
+    const stamped = w.querySelectorAll('[data-rtl-arrow]');
+    assert.equal(stamped.length, 1, `${glyph} stamped`);
+    assert.equal(stamped[0].textContent, glyph, 'glyph preserved byte-for-byte');
+  });
+}
+
+test('every selected option that carries an arrow is mirrored (multi-arrow widget)', () => {
+  const w = askWidget(QUESTION_HE, OPTIONS_HE);
+  w.querySelectorAll('[role="option"]')[1].appendChild(el('span', { 'aria-hidden': 'true' }, ['→']));
+  renderedHost(w);
+  I.processAskWidget(w);
+  assert.equal(w.querySelectorAll('[data-rtl-arrow]').length, 2, 'both option arrows stamped');
+});
+
+test('an empty/missing aria-label falls back to the widget text for direction', () => {
+  const w = askWidget(QUESTION_HE, OPTIONS_HE);
+  w.querySelector('[role="listbox"]').setAttribute('aria-label', ''); // empty → proseText fallback
+  renderedHost(w);
+  I.processAskWidget(w);
+  assert.equal(w.getAttribute('dir'), 'rtl', 'falls back to the Hebrew widget text → RTL');
+});
+
+test('a counter-shaped run that is an OPTION LABEL is never isolated as the counter', () => {
+  const w = askWidget(QUESTION_HE, ['1 of 3', 'רגיל']); // an option literally labeled "1 of 3"
+  renderedHost(w);
+  I.processAskWidget(w);
+  for (const opt of w.querySelectorAll('[role="option"]')) {
+    assert.equal(opt.querySelector('[data-rtl-ltr]'), null, 'an option label is never the pagination counter');
+  }
+  // the real nav counter is still the one isolated
+  assert.equal(w.querySelectorAll('[data-rtl-ltr]').length, 1, 'only the real nav counter');
+});
+
+test('processAskWidget is idempotent — a second pass changes nothing', () => {
+  const w = askWidget(QUESTION_HE, OPTIONS_HE);
+  renderedHost(w);
+  I.processAskWidget(w);
+  const snap = () => ({
+    dir: w.getAttribute('dir'),
+    arrows: w.querySelectorAll('[data-rtl-arrow]').length,
+    ltr: w.querySelectorAll('[data-rtl-ltr]').length,
+    els: w.querySelectorAll('*').length,
+  });
+  const before = JSON.stringify(snap());
+  I.processAskWidget(w);
+  assert.equal(JSON.stringify(snap()), before, 'second pass is a no-op (stable attrs, no new nodes)');
+});
+
+test('paginating RTL → neutral → RTL clears then re-applies every affordance', () => {
+  const w = askWidget(QUESTION_HE, OPTIONS_HE);
+  const lb = w.querySelector('[role="listbox"]');
+  renderedHost(w);
+  I.processAskWidget(w);
+  assert.ok(w.querySelector('[data-rtl-arrow]') && w.querySelector('[data-rtl-ltr]'), 'RTL: stamped');
+  lb.setAttribute('aria-label', '?!'); // neutral question
+  I.processAskWidget(w);
+  assert.equal(w.getAttribute('dir'), null, 'neutral: dir cleared');
+  assert.equal(w.querySelector('[data-rtl-arrow]'), null, 'neutral: arrow cleared');
+  assert.equal(w.querySelector('[data-rtl-ltr]'), null, 'neutral: counter isolation cleared');
+  lb.setAttribute('aria-label', QUESTION_HE); // back to Hebrew
+  I.processAskWidget(w);
+  assert.equal(w.getAttribute('dir'), 'rtl', 'RTL again: dir re-applied');
+  assert.ok(w.querySelector('[data-rtl-arrow]') && w.querySelector('[data-rtl-ltr]'), 'RTL again: re-stamped');
+});
+
+test('a whitespace-only aria-label falls back to the visible body question (RTL)', () => {
+  const w = askWidget(QUESTION_HE, OPTIONS_HE);
+  w.querySelector('[role="listbox"]').setAttribute('aria-label', '   '); // blank, not empty
+  renderedHost(w);
+  I.processAskWidget(w);
+  assert.equal(w.getAttribute('dir'), 'rtl', 'blank aria-label → fall back to the Hebrew body → RTL');
+});
+
+test('a counter-SHAPED badge ("3 / 4") before the real counter does not steal the isolation', () => {
+  const w = askWidget(QUESTION_HE, OPTIONS_HE);
+  const header = w.querySelector('.font-claude-response').parentElement;
+  // a rating-like badge that ALSO matches COUNTER_RE, placed before the real nav counter
+  header.insertBefore(el('span', null, ['3 / 4']), header.childNodes[1]);
+  renderedHost(w);
+  I.processAskWidget(w);
+  assert.equal(header.hasAttribute('data-rtl-ltr'), false, 'the Hebrew header is never isolated LTR');
+  const stamped = w.querySelectorAll('[data-rtl-ltr]');
+  assert.equal(stamped.length, 1, 'exactly one cluster isolated');
+  assert.ok((stamped[0].textContent || '').includes('1 of 3'), 'the GENUINE nav counter is the one isolated');
+});
+
+test('a <style>-first widget with no aria-label still resolves RTL (style text never votes)', () => {
+  const lb = el('div', { role: 'listbox' }, []); // no aria-label → proseText fallback
+  const style = el('style', null, ['@keyframes x { from { transform: translateX(-12px); opacity: 0; } }']);
+  const q = el('span', { class: 'font-claude-response' }, [QUESTION_HE]);
+  const w = el('div', { 'data-ask-user-input-banner': 'true' }, [style, el('div', null, [q, lb])]);
+  renderedHost(w);
+  I.processAskWidget(w);
+  assert.equal(w.getAttribute('dir'), 'rtl', 'the long LTR <style> CSS does not tip the widget LTR');
+});
+
 // ---- inNoInject covers exactly the right zones -------------------------------------------
 test('inNoInject matches <style>/<script>/composer/ask-widget but not rendered prose', () => {
   const style = el('style', null, ['x']);
@@ -286,4 +446,14 @@ test('inNoInject matches <style>/<script>/composer/ask-widget but not rendered p
   assert.equal(I.inNoInject(widgetChild), true, 'inside the ask-widget is a no-inject zone');
   assert.equal(I.inNoInject(composerChild), true, 'inside the composer is a no-inject zone');
   assert.equal(I.inNoInject(prose), false, 'rendered prose is fine to transform');
+});
+
+test('wrapRelationsUnder does NOT inject into a <script> (only <style> was tested before)', () => {
+  const script = el('script', null, ['if (3 < 5) run(); // a < b']);
+  const p = el('p', null, ['3 < 5']);
+  const root = el('div', { class: 'standard-markdown' }, [script, p]);
+  I.wrapRelationsUnder(root);
+  assert.equal(script.childNodes.length, 1, '<script> source untouched (no <span> injected)');
+  assert.equal(script.childNodes[0].nodeType, 3, 'still raw script text');
+  assert.ok(p.querySelector('[data-rtl-relation]'), 'CONTROL: real prose relation still isolated');
 });

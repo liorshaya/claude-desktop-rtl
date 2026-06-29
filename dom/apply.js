@@ -197,7 +197,9 @@ function processCodeBlock(pre) {
 function processAskWidget(widget) {
   if (widget.closest('pre, code')) return;
   const lb = widget.querySelector(SELECTORS.askQuestion);
-  const question = (lb && lb.getAttribute('aria-label')) || proseText(widget);
+  const label = lb && lb.getAttribute('aria-label');
+  // A blank/whitespace aria-label is as good as empty — fall back to the visible body question.
+  const question = (label && label.trim()) || proseText(widget);
   const rtl = resolvedDir(question) === 'rtl';
   if (rtl && widget.getAttribute('dir') !== 'rtl') widget.setAttribute('dir', 'rtl');
   if (!rtl && widget.getAttribute('dir') === 'rtl') widget.removeAttribute('dir');
@@ -240,9 +242,6 @@ function styleAskAffordances(widget, rtl) {
   const counter = rtl ? findAskCounter(widget) : null;
   let cluster = counter && counter.parentElement; // the prev/counter/next group
   if (cluster === widget) cluster = counter; // never the root (the descendant-combinator CSS skips it)
-  // Defense in depth: never isolate a cluster whose own text is majority-RTL — that would force the
-  // Hebrew question/options LTR (the version-badge false-positive). The counter shape gates this too.
-  if (cluster && resolvedDir(proseText(cluster)) === 'rtl') cluster = null;
   syncStamp(qsa('[data-rtl-ltr]', widget), cluster ? [cluster] : [], 'data-rtl-ltr');
 }
 
@@ -276,7 +275,14 @@ function findAskCounter(widget) {
     const s = spans[i];
     if (s.childElementCount) continue; // leaf text only
     if (s.closest(SELECTORS.askOption + ', ' + SELECTORS.askQuestion)) continue; // header/nav, not the list
-    if (COUNTER_RE.test((s.textContent || '').trim())) return s;
+    if (!COUNTER_RE.test((s.textContent || '').trim())) continue;
+    // Skip a counter-SHAPED badge ("3 / 4") whose CLUSTER is majority-RTL (it shares the header
+    // with the Hebrew question) — isolating that cluster would force the question LTR. Keep
+    // scanning so the GENUINE "1 of 3" (cluster = the LTR nav) is still found. A localized-digit
+    // counter ("١ of ٣") also resolves RTL here and is left alone (it doesn't scramble).
+    const cluster = s.parentElement;
+    if (cluster && cluster !== widget && resolvedDir(proseText(cluster)) === 'rtl') continue;
+    return s;
   }
   return null;
 }
@@ -497,7 +503,9 @@ function processDirBlock(el) {
 // textContent when there are no islands (or no DOM API, e.g. unit tests).
 function proseText(el) {
   if (!el) return '';
-  const ISLAND = SELECTORS.math + ', ' + SELECTORS.code;
+  // <style>/<script> hold CSS/JS, not display text — exclude them like math/code islands so a
+  // widget's <style> keyframes never vote on its base direction (the no-aria-label fallback).
+  const ISLAND = SELECTORS.math + ', ' + SELECTORS.code + ', style, script';
   let raw;
   if (!el.querySelector || typeof document === 'undefined' || !document.createTreeWalker
       || !el.querySelector(ISLAND)) {
