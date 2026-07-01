@@ -170,3 +170,41 @@ test('work cap: a >400-block message is fully processed across passes, not silen
   assert.equal(missing, 0, 'every item eventually processed (tail not silently dropped)');
   assert.ok(passes >= 1, 'the first pass really was truncated (the control that the cap fired)');
 });
+
+test("table undo never strips an AUTHOR's dir, even after we stamped the table (follow-up)", () => {
+  // A user-authored artifact table carries its own dir="rtl". We stamp it (DONE fingerprint)
+  // on first sight; when its content then changes and the majority is not RTL, the undo path
+  // must not remove the author's dir — only a flip WE made (data-rtl-tdir) is ours to undo.
+  const tbody = el('tbody');
+  tbody.appendChild(el('tr', null, [el('td', null, ['English cell']), el('td', null, ['more English'])]));
+  const table = el('table', { dir: 'rtl' }, [tbody]); // author's own dir
+  host(table);
+  I.processTable(table); // stamps DONE; tableDir says LTR-majority; no data-rtl-tdir
+  assert.equal(table.getAttribute('dir'), 'rtl', 'author dir kept on first pass');
+  tbody.appendChild(el('tr', null, [el('td', null, ['streamed English']), el('td', null, ['again English'])]));
+  I.processTable(table); // content changed → re-decided; still must not touch the author dir
+  assert.equal(table.getAttribute('dir'), 'rtl', "author dir survives re-decision (not ours to undo)");
+});
+
+test('relations cap: >400 no-run math-ish nodes must NOT report truncation (no re-queue loop)', () => {
+  // "(see, note)" passes the cheap hasMathRun gate (bracket + comma) but relationRuns finds no
+  // run — such nodes stay accepted forever. Counting them toward truncation made the observer
+  // re-queue the root every settle window for the message's lifetime.
+  const root = el('div', { class: 'standard-markdown' });
+  for (let i = 0; i < 420; i++) root.appendChild(el('p', null, ['some text (see, note) here']));
+  assert.equal(I.wrapRelationsUnder(root), false, 'nothing to split → not truncated');
+});
+
+test('relations cap: >400 nodes with REAL runs truncate once, then finish on the next pass', () => {
+  const root = el('div', { class: 'standard-markdown' });
+  const ps = [];
+  for (let i = 0; i < 420; i++) {
+    const p = el('p', null, ['נתון ש-3 < 5 כאן']);
+    ps.push(p);
+    root.appendChild(p);
+  }
+  assert.equal(I.wrapRelationsUnder(root), true, 'first pass hits the mutation cap');
+  assert.equal(I.wrapRelationsUnder(root), false, 'second pass finishes the tail');
+  const unwrapped = ps.filter((p) => p.querySelector('[data-rtl-relation]') === null).length;
+  assert.equal(unwrapped, 0, 'every node eventually wrapped');
+});

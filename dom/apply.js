@@ -159,10 +159,15 @@ function processTable(table) {
   const fp = contentFp(shape.allCells.join(''));
   const seen = table.getAttribute(DONE_ATTR);
   if (seen === fp) return false; // settled content → decision stands (§3.3)
-  if (tableDir(shape.allCells, shape.headers) === 'rtl') table.setAttribute('dir', 'rtl');
-  // Streamed rows can flip the majority back (Hebrew header, then English body): undo OUR
-  // stale flip — only ours (seen), never an explicit dir that predates us.
-  else if (seen && table.getAttribute('dir') === 'rtl') table.removeAttribute('dir');
+  if (tableDir(shape.allCells, shape.headers) === 'rtl') {
+    table.setAttribute('dir', 'rtl');
+    table.setAttribute('data-rtl-tdir', '1'); // OUR flip — the only dir the undo below may touch
+  } else if (table.getAttribute('data-rtl-tdir')) {
+    // Streamed rows can flip the majority back (Hebrew header, then English body): undo OUR
+    // stale flip. An author's own dir (artifact tables) carries no marker and is never removed.
+    table.removeAttribute('dir');
+    table.removeAttribute('data-rtl-tdir');
+  }
   alignColumns(table);
   overrideCellDirs(table); // §8.K per cell: fix a Latin/marker-opener majority-RTL cell
   table.setAttribute(DONE_ATTR, fp);
@@ -456,8 +461,17 @@ function wrapRelationsUnder(root) {
   const targets = [];
   let n;
   while ((n = walker.nextNode())) targets.push(n);
-  for (let i = 0; i < targets.length && i < MAX_NODES_PER_PASS; i++) splitRelations(targets[i]);
-  return targets.length > MAX_NODES_PER_PASS; // truncated → the caller re-queues this root
+  // Cap the MUTATIONS, not the walk: a node that hasMathRun accepts but relationRuns finds
+  // nothing in (e.g. an English "(see, note)" parenthetical) stays accepted forever — counting
+  // those toward truncation would re-queue the root every settle window for the message's
+  // lifetime. Splits strictly decrease across passes (wrapped nodes are rejected by the
+  // walker), so this converges; the no-run parses are cheap and pre-gated by hasMathRun.
+  let splits = 0;
+  for (let i = 0; i < targets.length; i++) {
+    if (splits >= MAX_NODES_PER_PASS) return true; // real work remains → caller re-queues
+    if (splitRelations(targets[i])) splits += 1;
+  }
+  return false;
 }
 
 function splitRelations(node) {
@@ -466,7 +480,7 @@ function splitRelations(node) {
   // EXCLUDING the < > of an HTML tag (those would read ">div<" if isolated). A lone relation
   // with no operands is a single-char run. Engine offsets are exact UTF-16 ranges.
   const runs = relationRuns(text);
-  if (!runs.length) return; // e.g. a node whose only "relations" are tag brackets
+  if (!runs.length) return false; // e.g. a node whose only "relations" are tag brackets
   const frag = document.createDocumentFragment();
   let pos = 0;
   for (let r = 0; r < runs.length; r++) {
@@ -481,6 +495,7 @@ function splitRelations(node) {
   }
   if (pos < text.length) frag.appendChild(document.createTextNode(text.slice(pos)));
   if (node.parentNode) node.parentNode.replaceChild(frag, node);
+  return true; // did real work (wrapRelationsUnder counts this toward the pass cap)
 }
 
 // §3.4/§8.F — a SIGNED number ("-5", "+3", "−5") in RTL has its leading sign detached by the
