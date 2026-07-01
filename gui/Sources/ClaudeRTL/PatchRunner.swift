@@ -28,6 +28,7 @@ final class PatchRunner: ObservableObject {
     @Published var log = ""
     @Published var busy = false
     @Published var busyTask = ""   // what the spinner is doing — install/uninstall/open differ a lot in duration
+    @Published var lastFailure: String?   // one-line failure banner; the full log lives under Details
     @Published var updateCheck: UpdateCheck = .idle
     @Published var launchAtLogin = false
 
@@ -78,7 +79,13 @@ final class PatchRunner: ObservableObject {
     }
 
     func refresh() async {
-        let out = await capture("/bin/bash", [scriptsDir + "/patch.sh", "--status"])
+        let (out, code) = await exec("/bin/bash", [scriptsDir + "/patch.sh", "--status"])
+        // --status always exits 0 when it runs at all, so a nonzero code means the status run
+        // itself broke (script missing, bash failed to launch). Silently discarding that left
+        // the UI claiming "Claude: not found" with an empty log and no way to diagnose it.
+        if code != 0 {
+            log += "status check failed (exit \(code)):\n\(out)"
+        }
         var s = AppStatus()
         s.originalPresent = out.contains("original :") && !out.contains("original : MISSING")
         s.patchedInstalled = out.contains("— installed")
@@ -104,20 +111,25 @@ final class PatchRunner: ObservableObject {
 
     func install() async {
         busy = true; busyTask = "Installing RTL — copying and re-signing Claude can take a minute…"
-        log = ""
-        await runPatch(["--install"])
+        log = ""; lastFailure = nil
+        let code = await runPatch(["--install"])
+        if code != 0 { lastFailure = "Install failed — the log under Details has the reason." }
         await refresh()
         busy = false; busyTask = ""
     }
     func uninstall() async {
         busy = true; busyTask = "Uninstalling…"
-        await runPatch(["--uninstall"])
+        lastFailure = nil
+        let code = await runPatch(["--uninstall"])
+        if code != 0 { lastFailure = "Uninstall failed — the log under Details has the reason." }
         await refresh()
         busy = false; busyTask = ""
     }
     func setWatch(_ on: Bool) async {
         busy = true; busyTask = on ? "Enabling auto re-apply…" : "Disabling auto re-apply…"
-        await runPatch([on ? "--watch" : "--unwatch"])
+        lastFailure = nil
+        let code = await runPatch([on ? "--watch" : "--unwatch"])
+        if code != 0 { lastFailure = "Couldn't change the auto re-apply watcher — see Details." }
         await refresh()
         busy = false; busyTask = ""
     }

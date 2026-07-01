@@ -115,6 +115,7 @@ struct ContentView: View {
                 stateBadge
                 controls
                 if s.originalRunning { warning }
+                if let failure = runner.lastFailure, !runner.busy { failureBanner(failure) }
                 primaryButton
                 secondaryRow
                 if runner.busy { workingRow }
@@ -276,6 +277,30 @@ struct ContentView: View {
         if alert.runModal() == .alertFirstButtonReturn {
             Task { await runner.uninstall() }
         }
+    }
+
+    // A failed action used to leave no visible trace — the badge simply stayed at its old
+    // state and the reason sat in the collapsed Details log. One red line, cleared when the
+    // next action starts; it also opens Details so the log is a single click away.
+    private func failureBanner(_ text: String) -> some View {
+        Button {
+            showDetails = true
+        } label: {
+            HStack(alignment: .top, spacing: 6) {
+                Image(systemName: "xmark.octagon.fill").foregroundStyle(.red)
+                Text(text)
+                    .font(.caption)
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)   // wrap, never truncate
+                Spacer()
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.red.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Last action failed. \(text)")
     }
 
     private var workingRow: some View {
