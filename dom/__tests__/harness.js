@@ -16,8 +16,8 @@ const NodeFilter = { SHOW_TEXT: 4, SHOW_ELEMENT: 1, FILTER_ACCEPT: 1, FILTER_REJ
 
 // A deliberately small CSS selector matcher: tag + .class + [attr] / [attr="v"] / [attr=""],
 // comma lists. Covers every selector surfaces.js uses. No combinators/pseudos (the source
-// never relies on them for the leaf passes; readTableShape's `tr:first-child th` simply yields
-// no header match, which tableDir tolerates).
+// never relies on them for the leaf passes; readTableShape scopes its header query to the
+// thead / first row explicitly, so it needs no pseudo-class).
 function matchesSimple(el, sel) {
   if (!sel) return false;
   let rest = sel;

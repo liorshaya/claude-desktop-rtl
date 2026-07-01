@@ -100,9 +100,15 @@ function findAskWidgets(root) {
 
 // Read a <table> as plain text for the engine (§3.2): the header row (the column-order
 // tie-break) and EVERY cell (drives the majority column-order decision in tableDir).
-// Returns { headers, allCells }.
+// Returns { headers, allCells }. NB: headers must be ONE row — the old combined selector
+// ('thead …, tr:first-child …') also matched the FIRST BODY row (tr:first-child is true of
+// the first tr of EACH row group), so the tie-break mixed body cells into the header vote.
 function readTableShape(table) {
-  const headerCells = qsa('thead th, thead td, tr:first-child th, tr:first-child td', table);
+  let headerCells = qsa('thead th, thead td', table);
+  if (!headerCells.length) {
+    const firstRow = qsa('tr', table)[0];
+    headerCells = firstRow ? qsa('th, td', firstRow) : [];
+  }
   const headers = headerCells.map((c) => (c.textContent || '').trim());
   const allCells = qsa('th, td', table).map((c) => (c.textContent || '').trim());
   return { headers, allCells };
