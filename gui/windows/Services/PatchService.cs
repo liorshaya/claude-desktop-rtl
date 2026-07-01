@@ -81,20 +81,44 @@ public sealed class PatchService
         var st = new AppStatus { Kind = kind };
         if (st.Kind == InstallKind.None) return st;
 
-        var (verify, _) = await RunCapturedAsync("powershell.exe",
-            $"-NoProfile -ExecutionPolicy Bypass -File \"{ScriptFor(st.Kind)}\" -Verify");
-        st.Raw = verify;
-        st.RtlActive = ParseBool(verify, "RTL injected");
-        st.CoworkOk = st.Kind != InstallKind.Msix
-            || (ParseBool(verify, "Claude.exe signed by our cert") && ParseBool(verify, "cowork-svc signed by our cert"));
-        st.FullyPatched = verify.Contains("OK - RTL");
+        if (st.Kind == InstallKind.Msix)
+        {
+            var (verify, _) = await RunCapturedAsync("powershell.exe",
+                $"-NoProfile -ExecutionPolicy Bypass -File \"{MsixScript}\" -Verify");
+            st.Raw = verify;
+            st.RtlActive = ParseBool(verify, "RTL injected");
+            st.CoworkOk = ParseBool(verify, "Claude.exe signed by our cert") && ParseBool(verify, "cowork-svc signed by our cert");
+            st.FullyPatched = verify.Contains("OK - RTL");
+        }
+        else
+        {
+            // patch.ps1 has NO -Verify switch (passing it fails parameter binding before the
+            // script runs, so Squirrel installs could never show "patched"). Its -Status
+            // prints "patched : True  (payload marker in app.asar)" — parse that. No
+            // cowork-svc exists on Squirrel, so RTL-in-asar IS fully patched.
+            var (status, _) = await RunCapturedAsync("powershell.exe",
+                $"-NoProfile -ExecutionPolicy Bypass -File \"{SquirrelScript}\" -Status");
+            st.Raw = status;
+            st.RtlActive = status.Contains("patched : True");
+            st.FullyPatched = st.RtlActive;
+        }
 
-        // one combined query for version + task + running-state
+        // one combined query for version + watcher + running-state — per install kind: the
+        // old MSIX-only query returned an empty version, a permanently-false watcher state
+        // (Squirrel's watcher is an HKCU Run entry, not the scheduled task), and a
+        // never-matching process path on Squirrel, so the auto-update toggle snapped back
+        // Off after every successful enable.
+        var infoCmd = st.Kind == InstallKind.Msix
+            ? "$p=Get-AppxPackage -Name Claude -ErrorAction SilentlyContinue; 'VER=' + $p.Version; " +
+              "'TASK=' + [bool](Get-ScheduledTask -TaskName '" + MsixTask + "' -ErrorAction SilentlyContinue); " +
+              "'RUN=' + [bool](@(Get-CimInstance Win32_Process -Filter \\\"Name='Claude.exe'\\\" -ErrorAction SilentlyContinue | Where-Object { $_.ExecutablePath -like '*\\WindowsApps\\Claude_*' }).Count)"
+            : "$d=Get-ChildItem (Join-Path $env:LOCALAPPDATA 'AnthropicClaude') -Directory -Filter 'app-*' -ErrorAction SilentlyContinue | " +
+              "Sort-Object { [version]($_.Name -replace '^app-','') } -Descending | Select-Object -First 1; " +
+              "'VER=' + ($d.Name -replace '^app-',''); " +
+              "'TASK=' + [bool]((Get-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run' -Name 'ClaudeRtlWatcher' -ErrorAction SilentlyContinue).ClaudeRtlWatcher); " +
+              "'RUN=' + [bool](@(Get-CimInstance Win32_Process -Filter \\\"Name='Claude.exe'\\\" -ErrorAction SilentlyContinue | Where-Object { $_.ExecutablePath -like '*\\AnthropicClaude\\app-*' }).Count)";
         var (info, _) = await RunCapturedAsync("powershell.exe",
-            "-NoProfile -ExecutionPolicy Bypass -Command \"" +
-            "$p=Get-AppxPackage -Name Claude -ErrorAction SilentlyContinue; 'VER=' + $p.Version; " +
-            "'TASK=' + [bool](Get-ScheduledTask -TaskName '" + MsixTask + "' -ErrorAction SilentlyContinue); " +
-            "'RUN=' + [bool](@(Get-CimInstance Win32_Process -Filter \\\"Name='Claude.exe'\\\" -ErrorAction SilentlyContinue | Where-Object { $_.ExecutablePath -like '*\\WindowsApps\\Claude_*' }).Count)\"");
+            "-NoProfile -ExecutionPolicy Bypass -Command \"" + infoCmd + "\"");
         st.Version       = Field(info, "VER=", "-");
         st.AutoUpdateOn  = Field(info, "TASK=", "False").StartsWith("True", StringComparison.OrdinalIgnoreCase);
         st.ClaudeRunning = Field(info, "RUN=", "False").StartsWith("True", StringComparison.OrdinalIgnoreCase);
