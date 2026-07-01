@@ -153,12 +153,12 @@ function processAdded(node) {
 // on rendered content). Layer 2: per-COLUMN alignment (alignColumns). Idempotent via
 // DONE_ATTR.
 function processTable(table) {
-  if (inEditable(table)) return; // a table being edited in the composer/edit box → don't touch
-  if (table.closest('pre, code')) return; // a table inside a source/code view stays LTR
+  if (inEditable(table)) return false; // a table being edited in the composer/edit box → don't touch
+  if (table.closest('pre, code')) return false; // a table inside a source/code view stays LTR
   const shape = readTableShape(table);
   const fp = contentFp(shape.allCells.join(''));
   const seen = table.getAttribute(DONE_ATTR);
-  if (seen === fp) return; // settled content → decision stands (§3.3)
+  if (seen === fp) return false; // settled content → decision stands (§3.3)
   if (tableDir(shape.allCells, shape.headers) === 'rtl') table.setAttribute('dir', 'rtl');
   // Streamed rows can flip the majority back (Hebrew header, then English body): undo OUR
   // stale flip — only ours (seen), never an explicit dir that predates us.
@@ -166,6 +166,7 @@ function processTable(table) {
   alignColumns(table);
   overrideCellDirs(table); // §8.K per cell: fix a Latin/marker-opener majority-RTL cell
   table.setAttribute(DONE_ATTR, fp);
+  return true;
 }
 
 // §8.K, per cell — a cell that OPENS with Latin/marker but is majority-RTL ("React הוא
@@ -217,15 +218,16 @@ function alignColumns(table) {
 // "table"/text) gets tagged so the CSS renders it RTL per line. REAL code is left LTR
 // untouched — the engine's codeBlockIsProse is conservative (any code structure → code).
 function processCodeBlock(pre) {
-  if (inEditable(pre)) return; // a fenced block being typed in the composer/edit box → leave it
+  if (inEditable(pre)) return false; // a fenced block being typed in the composer/edit box → leave it
   const t = pre.textContent || '';
   const fp = contentFp(t);
-  if (pre.getAttribute(DONE_ATTR) === fp) return; // settled content → decision stands (§3.3)
+  if (pre.getAttribute(DONE_ATTR) === fp) return false; // settled content → decision stands (§3.3)
   // Re-decide on content change: a fence that opened with Hebrew lines can turn out to be real
   // code once its structure streams in (and vice versa) — data-rtl-text is only ever ours.
   if (codeBlockIsProse(t)) pre.setAttribute('data-rtl-text', '');
   else pre.removeAttribute('data-rtl-text');
   pre.setAttribute(DONE_ATTR, fp);
+  return true;
 }
 
 // §6 — the interactive "ask user a question" widget. Give it a content-derived base direction
@@ -238,7 +240,7 @@ function processCodeBlock(pre) {
 // owns this DOM, so we never inject spans (it's in `noInject`). NOT stamped DONE — the widget
 // re-renders across questions ("1 of 3" → "2 of 3"), so we re-evaluate and can restore LTR.
 function processAskWidget(widget) {
-  if (widget.closest('pre, code')) return;
+  if (widget.closest('pre, code')) return false;
   const lb = widget.querySelector(SELECTORS.askQuestion);
   const label = lb && lb.getAttribute('aria-label');
   // A blank/whitespace aria-label is as good as empty — fall back to the visible body question.
@@ -260,6 +262,7 @@ function processAskWidget(widget) {
       else if (!rtl && row.getAttribute('dir') === 'auto') row.removeAttribute('dir');
     }
   }
+  return true; // re-evaluated every pass by design (never DONE-stamped) — counts as work
 }
 
 // §6/§8.F — the widget's directional AFFORDANCES, fixed ATTRIBUTE-ONLY (stamp existing nodes,
@@ -369,12 +372,12 @@ function inLtrIsland(node) {
 }
 
 function wrapArrowsInBlock(block) {
-  if (inNoInject(block)) return; // never inject into composer/edit box, ask-widget, <style>
+  if (inNoInject(block)) return false; // never inject into composer/edit box, ask-widget, <style>
   const fp = contentFp(block.textContent || '');
-  if (block.getAttribute(ARROWS_ATTR) === fp) return; // settled content → already handled (§3.3)
+  if (block.getAttribute(ARROWS_ATTR) === fp) return false; // settled content → already handled (§3.3)
   block.setAttribute(ARROWS_ATTR, fp);
-  if (!hasMirrorArrow(block.textContent || '')) return;
-  if (resolvedDir(proseText(block)) !== 'rtl') return; // mirror only where the block renders RTL
+  if (!hasMirrorArrow(block.textContent || '')) return true;
+  if (resolvedDir(proseText(block)) !== 'rtl') return true; // mirror only where the block renders RTL
   const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT, {
     acceptNode: (n) => {
       if (!n.nodeValue || !hasMirrorArrow(n.nodeValue)) return NodeFilter.FILTER_REJECT;
@@ -388,6 +391,7 @@ function wrapArrowsInBlock(block) {
   let n;
   while ((n = walker.nextNode())) targets.push(n);
   for (let i = 0; i < targets.length; i++) splitArrows(targets[i]);
+  return true;
 }
 
 function splitArrows(node) {
@@ -435,8 +439,8 @@ function splitArrows(node) {
 // the input; brackets are excluded by the engine. Idempotent: a relation already inside a
 // data-rtl-relation span is left alone, so re-walks during streaming are safe.
 function wrapRelationsUnder(root) {
-  if (!root || root.nodeType !== 1) return;
-  if (!hasMathRun(root.textContent || '')) return; // comparison OR numeric arithmetic
+  if (!root || root.nodeType !== 1) return false;
+  if (!hasMathRun(root.textContent || '')) return false; // comparison OR numeric arithmetic
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
     acceptNode: (n) => {
       if (!n.nodeValue || !hasMathRun(n.nodeValue)) return NodeFilter.FILTER_REJECT;
@@ -453,6 +457,7 @@ function wrapRelationsUnder(root) {
   let n;
   while ((n = walker.nextNode())) targets.push(n);
   for (let i = 0; i < targets.length && i < MAX_NODES_PER_PASS; i++) splitRelations(targets[i]);
+  return targets.length > MAX_NODES_PER_PASS; // truncated → the caller re-queues this root
 }
 
 function splitRelations(node) {
@@ -486,12 +491,12 @@ function splitRelations(node) {
 // Skips rendered math/code islands; only RTL blocks are walked; stamped per block.
 const NUMS_ATTR = 'data-rtl-nums';
 function wrapSignedNumbersInBlock(block) {
-  if (inNoInject(block)) return; // never inject into composer/edit box, ask-widget, <style>
+  if (inNoInject(block)) return false; // never inject into composer/edit box, ask-widget, <style>
   const fp = contentFp(block.textContent || '');
-  if (block.getAttribute(NUMS_ATTR) === fp) return; // settled content → already handled (§3.3)
+  if (block.getAttribute(NUMS_ATTR) === fp) return false; // settled content → already handled (§3.3)
   block.setAttribute(NUMS_ATTR, fp);
-  if (!signedNumberRuns(block.textContent || '').length) return;
-  if (resolvedDir(proseText(block)) !== 'rtl') return; // only where the block renders RTL
+  if (!signedNumberRuns(block.textContent || '').length) return true;
+  if (resolvedDir(proseText(block)) !== 'rtl') return true; // only where the block renders RTL
   const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT, {
     acceptNode: (n) => {
       if (!n.nodeValue || !signedNumberRuns(n.nodeValue).length) return NodeFilter.FILTER_REJECT;
@@ -508,6 +513,7 @@ function wrapSignedNumbersInBlock(block) {
   let n;
   while ((n = walker.nextNode())) targets.push(n);
   for (let i = 0; i < targets.length; i++) splitSignedNumbers(targets[i]);
+  return true;
 }
 
 function splitSignedNumbers(node) {
@@ -539,20 +545,21 @@ function splitSignedNumbers(node) {
 // ul/ol containers only need the marker side (their items self-handle). Never overwrite an
 // explicit dir.
 function processDirBlock(el) {
-  if (inEditable(el)) return; // a list/quote being TYPED in the composer → don't stamp dir
-  if (el.closest('pre, code')) return; // inside a source/code view → stays LTR
+  if (inEditable(el)) return false; // a list/quote being TYPED in the composer → don't stamp dir
+  if (el.closest('pre, code')) return false; // inside a source/code view → stays LTR
   const seen = el.getAttribute(SEEN_ATTR);
-  if (!seen && el.getAttribute('dir')) return; // an explicit dir we didn't set → respect it
+  if (!seen && el.getAttribute('dir')) return false; // an explicit dir we didn't set → respect it
   const t = proseText(el);
   const fp = contentFp(t);
-  if (seen === fp) return; // settled content → decision stands (§3.3)
+  if (seen === fp) return false; // settled content → decision stands (§3.3)
   el.setAttribute(SEEN_ATTR, fp);
   if (plaintextOverrideDir(t) === 'rtl' && el.matches && el.matches('li, blockquote')) {
     applyRtlOverride(el); // content + bar both RTL
-    return;
+    return true;
   }
   if (el.getAttribute('data-rtl-dir')) clearRtlOverride(el); // content grew away from the override
   el.setAttribute('dir', resolvedDir(t) || 'auto'); // marker/bar follows the actual render
+  return true;
 }
 
 // Prose text of a block for direction detection — EXCLUDES isolated math/code islands,
@@ -629,53 +636,62 @@ function applyCellRtlOverride(cell) {
 // "React הוא ספרייה"). Then force RTL; otherwise leave it untouched (English is never
 // flipped — plaintextOverrideDir returns null for a majority-English block). Idempotent.
 function processProseDir(el) {
-  if (inEditable(el)) return; // a paragraph being TYPED in the composer → leave it alone
-  if (el.closest('pre, code')) return; // source/code view → stays LTR
-  if (el.closest('table')) return; // table cells get §8.K via overrideCellDirs (no text-align)
+  if (inEditable(el)) return false; // a paragraph being TYPED in the composer → leave it alone
+  if (el.closest('pre, code')) return false; // source/code view → stays LTR
+  if (el.closest('table')) return false; // table cells get §8.K via overrideCellDirs (no text-align)
   const seen = el.getAttribute(SEEN_ATTR);
-  if (!seen && el.getAttribute('dir')) return; // respect an explicit dir we didn't set
+  if (!seen && el.getAttribute('dir')) return false; // respect an explicit dir we didn't set
   const t = proseText(el);
   const fp = contentFp(t);
-  if (seen === fp) return; // settled content → decision stands (§3.3)
+  if (seen === fp) return false; // settled content → decision stands (§3.3)
   el.setAttribute(SEEN_ATTR, fp);
   if (plaintextOverrideDir(t) === 'rtl') applyRtlOverride(el);
   // An override applied to a half-streamed prefix ("React הוא …") must be UNDONE when the
   // block ends up majority-English — §8.K: English is never left flipped.
   else if (el.getAttribute('data-rtl-dir')) clearRtlOverride(el);
+  return true;
 }
 
+// Returns TRUE when the pass was TRUNCATED by the work cap — the caller (flush) then
+// re-queues this root so the remainder is processed on the next settle window instead of
+// silently never. The cap counts blocks that actually NEEDED work (a fingerprint-stamped,
+// unchanged block is a cheap skip and consumes no budget) — counting every node SEEN meant
+// a >400-leaf message had a tail that no pass could ever reach (the first 400 indices were
+// always the same already-done blocks).
 function processRoot(root) {
-  if (!root) return;
+  if (!root) return false;
   // The composer / in-place edit box is an INPUT surface (§5/§6): the only thing we touch
   // on it is dir="auto" (sweepInputs). When the observer scopes a pass INTO an editable —
   // the common case while typing, where `root` is the composer subtree — skip every content
   // pass. Mutating ProseMirror's managed DOM (a signed-number/arrow wrap, a list dir flip)
   // desyncs it and FREEZES typing. Editing a message in place scopes `root` to the message
   // root instead (not editable here), so the per-pass inEditable guards catch that case.
-  if (inEditable(root)) { sweepInputs(root); return; }
-  const tables = findTables(root);
-  for (let i = 0; i < tables.length && i < MAX_NODES_PER_PASS; i++) processTable(tables[i]);
-  const dirBlocks = findDirBlocks(root);
-  for (let i = 0; i < dirBlocks.length && i < MAX_NODES_PER_PASS; i++) processDirBlock(dirBlocks[i]);
-  const proseBlocks = findProseDirBlocks(root);
-  for (let i = 0; i < proseBlocks.length && i < MAX_NODES_PER_PASS; i++) processProseDir(proseBlocks[i]);
-  const codeBlocks = findCodeBlocks(root);
-  for (let i = 0; i < codeBlocks.length && i < MAX_NODES_PER_PASS; i++) processCodeBlock(codeBlocks[i]);
+  if (inEditable(root)) { sweepInputs(root); return false; }
+  let work = 0;
+  let truncated = false;
+  const run = (list, fn) => {
+    for (let i = 0; i < list.length; i++) {
+      if (work >= MAX_NODES_PER_PASS) { truncated = true; return; }
+      if (fn(list[i])) work += 1;
+    }
+  };
+  run(findTables(root), processTable);
+  run(findDirBlocks(root), processDirBlock);
+  run(findProseDirBlocks(root), processProseDir);
+  run(findCodeBlocks(root), processCodeBlock);
   if (root.matches && root.matches(SELECTORS.askWidget)) processAskWidget(root);
-  const askWidgets = findAskWidgets(root);
-  for (let i = 0; i < askWidgets.length && i < MAX_NODES_PER_PASS; i++) processAskWidget(askWidgets[i]);
+  run(findAskWidgets(root), processAskWidget);
   // Relations isolate the whole comparison EXPRESSION and are direction-independent, so they
   // run over the ENTIRE root (not just prose leaves) — this is what reaches a standalone
   // equation living in a non-`<p>` container. Arrows (flip only in RTL) and signed numbers stay
   // per-leaf, gated on the leaf rendering RTL.
-  wrapRelationsUnder(root);
+  if (wrapRelationsUnder(root)) truncated = true;
   const leaves = findLeafBlocks(root);
-  for (let i = 0; i < leaves.length && i < MAX_NODES_PER_PASS; i++) {
-    wrapArrowsInBlock(leaves[i]);
-    wrapSignedNumbersInBlock(leaves[i]);
-  }
+  run(leaves, wrapArrowsInBlock);
+  run(leaves, wrapSignedNumbersInBlock);
   if (ENABLE_ISLANDS) wrapBareIslands(root); // eslint-disable-line no-use-before-define
   sweepInputs(root);
+  return truncated;
 }
 
 // §3.6 step 2 — minimal, idempotent isolation of a bare opposite-direction run via
@@ -694,7 +710,11 @@ function makeObserver(doc) {
     ensureCSS(doc); // self-heal: re-inject the stylesheet if the app ever removed it
     const roots = pending.size ? Array.from(pending) : [doc.body];
     pending.clear();
-    for (const r of roots) processRoot(r);
+    let again = false;
+    for (const r of roots) {
+      if (processRoot(r)) { pending.add(r); again = true; } // truncated → finish next window
+    }
+    if (again) schedule();
   };
 
   const schedule = () => {

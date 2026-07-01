@@ -148,3 +148,25 @@ test('control: wrapping itself never invalidates the fingerprint (no self-retrig
   assert.equal(p.getAttribute('data-rtl-arrows'), stamped, 'fingerprint unchanged by our own wrap');
   assert.equal(elementChildren(p).length, before, 'no double-wrapping');
 });
+
+test('work cap: a >400-block message is fully processed across passes, not silently truncated', () => {
+  // The cap used to count nodes SEEN (stamped blocks included), so indices past 400 were
+  // unreachable on EVERY pass. It now counts blocks that needed work, and processRoot reports
+  // truncation so the observer re-queues the root until the message is fully covered.
+  const ul = el('ul');
+  const items = [];
+  for (let i = 0; i < 450; i++) {
+    const li = el('li', null, ['פריט מספר ' + i]);
+    items.push(li);
+    ul.appendChild(li);
+  }
+  const root = host(ul);
+  let passes = 0;
+  while (I.processRoot(root) === true) {
+    passes += 1;
+    assert.ok(passes < 10, 'converges (each truncated pass makes MAX_NODES_PER_PASS progress)');
+  }
+  const missing = items.filter((li) => li.getAttribute('dir') !== 'rtl').length;
+  assert.equal(missing, 0, 'every item eventually processed (tail not silently dropped)');
+  assert.ok(passes >= 1, 'the first pass really was truncated (the control that the cap fired)');
+});
