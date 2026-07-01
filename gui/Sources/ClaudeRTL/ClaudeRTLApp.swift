@@ -11,6 +11,7 @@ struct ClaudeRTLApp: App {
                 .task { await runner.refresh() }
         } label: {
             Image(nsImage: Self.statusIcon)
+                .accessibilityLabel("Claude RTL")   // VoiceOver otherwise announces an unnamed image
         }
         .menuBarExtraStyle(.window)
     }
