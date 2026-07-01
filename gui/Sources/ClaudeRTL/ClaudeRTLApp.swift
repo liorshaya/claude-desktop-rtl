@@ -256,10 +256,26 @@ struct ContentView: View {
                     Button { Task { await runner.openPatched() } } label: { Label("Open", systemImage: "play.fill") }
                 }
                 Spacer()
-                Button(role: .destructive) { Task { await runner.uninstall() } } label: { Label("Uninstall", systemImage: "trash") }
+                Button(role: .destructive) { confirmUninstall() } label: { Label("Uninstall", systemImage: "trash") }
             }
         }
         .buttonStyle(.bordered).disabled(runner.busy)
+    }
+
+    // Uninstall is the one destructive action with no natural gate (no admin prompt on macOS),
+    // so a mis-click next to "Open" removed the app instantly. NSAlert (not SwiftUI's
+    // confirmationDialog) because presentation inside a MenuBarExtra window panel is reliable.
+    private func confirmUninstall() {
+        let alert = NSAlert()
+        alert.messageText = "Uninstall Claude-RTL?"
+        alert.informativeText = "This removes the patched copy at ~/Applications/Claude-RTL.app. The original Claude app is never touched, and you can reinstall anytime."
+        alert.alertStyle = .warning
+        let remove = alert.addButton(withTitle: "Uninstall")
+        remove.hasDestructiveAction = true
+        alert.addButton(withTitle: "Cancel")
+        if alert.runModal() == .alertFirstButtonReturn {
+            Task { await runner.uninstall() }
+        }
     }
 
     private var workingRow: some View {
