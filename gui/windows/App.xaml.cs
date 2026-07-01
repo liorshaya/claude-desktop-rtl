@@ -53,7 +53,15 @@ public partial class App : Application
 
     private void ShowPopup()
     {
-        _popup ??= new PopupWindow(_svc);
+        if (_popup == null)
+        {
+            _popup = new PopupWindow(_svc);
+            // A closed WPF window (Alt+F4 works even on WindowStyle=None) can never be
+            // Show()n again — and the InvalidOperationException lands in a discarded async
+            // Task, so the tray's left-click just died silently. Recreate on next open,
+            // same pattern as DashboardWindow.ShowSingleton.
+            _popup.Closed += (_, _) => _popup = null;
+        }
         _ = _popup.ShowNearTrayAsync();
         _ = RefreshIconAsync();
     }
