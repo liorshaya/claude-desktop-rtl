@@ -101,7 +101,10 @@ struct ContentView: View {
 
     private var s: AppStatus { runner.status }
     private var needsUpdate: Bool {
-        s.patchedInstalled && s.patchedVersion != "—" && s.originalVersion != s.patchedVersion
+        // originalPresent gate: with /Applications/Claude.app gone, originalVersion is "—" ≠
+        // patchedVersion, which showed "Update available" and offered an Update that patch.sh
+        // can only die on (no source app to copy).
+        s.originalPresent && s.patchedInstalled && s.patchedVersion != "—" && s.originalVersion != s.patchedVersion
     }
 
     var body: some View {
