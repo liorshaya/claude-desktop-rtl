@@ -99,6 +99,9 @@ public partial class DashboardWindow : Window
 
     private async void OnToggle(object s, RoutedEventArgs e)
     {
+        // The click already flipped the checkbox visually; if the operation is refused
+        // (busy, or no install), snap it back so it never shows a state that isn't real.
+        if (_busy || _st.Kind == InstallKind.None) { AutoToggle.IsChecked = _st.AutoUpdateOn; return; }
         bool want = AutoToggle.IsChecked == true;
         await RunOp(() => _svc.SetAutoUpdateAsync(_st.Kind, want), want ? "Enabling auto-update… (admin)" : "Disabling auto-update… (admin)");
     }
