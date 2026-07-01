@@ -60,12 +60,14 @@ public partial class DashboardWindow : Window
         (string badge, string icon, string title, string sub) =
             none   ? ("GrayDot", "–", "No Claude install found", "Install Claude Desktop first, then reopen this.") :
             active ? ("OkGreen", "✓", "You're all set", "RTL is active on Claude.") :
-                     ("Amber",   "!",      "RTL not applied", "Click “Install RTL” below to enable it.");
+            _st.RtlActive
+                   ? ("Amber",   "!", "Cowork needs repair", "RTL is injected, but the Cowork signing step must be re-run — click “Repair RTL”.") :
+                     ("Amber",   "!", "RTL not applied", "Click “Install RTL” below to enable it.");
         HeroBadge.Background = (Brush)FindResource(badge);
         HeroIcon.Text  = icon;
         HeroTitle.Text = title;
         HeroSub.Text   = sub;
-        InstallLine.Text = none ? "" : $"{(_st.Kind == InstallKind.Msix ? "MSIX" : "Squirrel")} · v{_st.Version}";
+        InstallLine.Text = none ? "" : KindVer();
         InstallLine.Visibility = none ? Visibility.Collapsed : Visibility.Visible;
 
         SetDot(DotRtl, ValRtl, _st.RtlActive);
@@ -76,8 +78,18 @@ public partial class DashboardWindow : Window
         StartupToggle.IsEnabled = !_busy;
         AutoToggle.IsChecked = _st.AutoUpdateOn;
         AutoToggle.IsEnabled = !none && !_busy;
-        PrimaryBtn.Content   = none ? "No Claude install" : active ? "Re-apply RTL" : "Install RTL";
+        PrimaryBtn.Content   = none ? "No Claude install"
+            : active ? "Re-apply RTL"
+            : _st.RtlActive ? "Repair RTL"   // apply re-runs the whole pipeline incl. the cert step
+            : "Install RTL";
         PrimaryBtn.IsEnabled = !none && !_busy;
+    }
+
+    // "Squirrel · v1.15200.0" — or just the kind when the version is unknown ("Squirrel · v" read broken).
+    private string KindVer()
+    {
+        var kind = _st.Kind == InstallKind.Msix ? "MSIX" : "Squirrel";
+        return string.IsNullOrEmpty(_st.Version) || _st.Version == "-" ? kind : $"{kind} · v{_st.Version}";
     }
 
     private void SetDot(Ellipse dot, TextBlock val, bool ok, bool na = false)

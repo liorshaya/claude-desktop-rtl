@@ -52,13 +52,21 @@ public partial class PopupWindow : Window
         else if (_st.FullyPatched)
         {
             BadgeTitle.Text = "RTL is active";
-            BadgeSub.Text = $"{KindName(_st.Kind)} · v{_st.Version}";
+            BadgeSub.Text = KindVer();
             SetBadge(0xF1, 0xFA, 0xF3, 0xD8, 0xEF, 0xDD);
+        }
+        else if (_st.RtlActive)
+        {
+            // MSIX: the payload IS in the asar but the Cowork cert step is broken —
+            // "RTL not applied / Install RTL" was telling that user the wrong story.
+            BadgeTitle.Text = "Cowork needs repair";
+            BadgeSub.Text = "RTL is on; the signing step must be re-run";
+            SetBadge(0xFD, 0xF5, 0xE9, 0xF2, 0xE2, 0xC3);
         }
         else
         {
             BadgeTitle.Text = "RTL not applied";
-            BadgeSub.Text = $"{KindName(_st.Kind)} · v{_st.Version}";
+            BadgeSub.Text = KindVer();
             SetBadge(0xFD, 0xF5, 0xE9, 0xF2, 0xE2, 0xC3);
         }
 
@@ -69,11 +77,20 @@ public partial class PopupWindow : Window
         AutoToggle.IsChecked = _st.AutoUpdateOn;
         AutoToggle.IsEnabled = !none && !_busy;
 
-        PrimaryBtn.Content = none ? "No Claude install" : _st.FullyPatched ? "Re-apply RTL" : "Install RTL";
+        PrimaryBtn.Content = none ? "No Claude install"
+            : _st.FullyPatched ? "Re-apply RTL"
+            : _st.RtlActive ? "Repair RTL"   // apply re-runs the whole pipeline incl. the cert step
+            : "Install RTL";
         PrimaryBtn.IsEnabled = !none && !_busy;
 
         Reposition();
     }
+
+    // "Squirrel · v1.15200.0" — or just the kind when the version is unknown ("Squirrel · v" read broken).
+    private string KindVer() =>
+        string.IsNullOrEmpty(_st.Version) || _st.Version == "-"
+            ? KindName(_st.Kind)
+            : $"{KindName(_st.Kind)} · v{_st.Version}";
 
     private void SetBadge(byte br, byte bg, byte bb, byte sr, byte sg, byte sb)
     {
