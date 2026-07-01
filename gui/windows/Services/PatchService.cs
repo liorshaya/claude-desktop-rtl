@@ -239,10 +239,15 @@ public sealed class PatchService
     }
     static int[] ParseVer(string s) => s.Split('.').Select(p => int.TryParse(p, out var n) ? n : 0).ToArray();
 
+    // PowerShell single-quoted strings escape ' by doubling it. Without this, a username
+    // with an apostrophe (O'Brien → C:\Users\O'Brien\...\Temp\...) breaks the -Command
+    // parse and every elevated action fails with an EMPTY log (the redirection itself died).
+    static string PsQuote(string s) => s.Replace("'", "''");
+
     async Task<int> RunElevatedAsync(InstallKind k, string args)
     {
         try { File.Delete(LogFile); } catch { /* ignore */ }
-        var cmd = $"& '{ScriptFor(k)}' {args} *> '{LogFile}'";
+        var cmd = $"& '{PsQuote(ScriptFor(k))}' {args} *> '{PsQuote(LogFile)}'";
         var psi = new ProcessStartInfo
         {
             FileName = "powershell.exe",
