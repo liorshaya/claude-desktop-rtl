@@ -286,9 +286,14 @@ public sealed class PatchService
         {
             using var p = Process.Start(psi);
             if (p is null) return ("", -1);
-            var outp = await p.StandardOutput.ReadToEndAsync().ConfigureAwait(false);
-            var err  = await p.StandardError.ReadToEndAsync().ConfigureAwait(false);
+            // Drain BOTH pipes concurrently: reading stdout to EOF before touching stderr
+            // deadlocks when the child fills the ~4KB stderr pipe while stdout is still open
+            // (classic .NET Process hang — PowerShell error records easily exceed that).
+            var tOut = p.StandardOutput.ReadToEndAsync();
+            var tErr = p.StandardError.ReadToEndAsync();
             await p.WaitForExitAsync().ConfigureAwait(false);
+            var outp = await tOut.ConfigureAwait(false);
+            var err  = await tErr.ConfigureAwait(false);
             return (outp + err, p.ExitCode);
         }
         catch (Exception ex) { return ("launch failed: " + ex.Message, -1); }
