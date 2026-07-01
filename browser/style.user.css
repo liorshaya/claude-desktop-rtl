@@ -2,19 +2,16 @@
  * No JavaScript: it gives you per-block base direction (the big win) and code/math
  * isolation declaratively. It CANNOT do the JS-only surfaces — table column flip
  * (§3.2) and dir="auto" on the composer/edit box (§5) — for those, install the
- * userscript instead. Keep these rules in sync with dom/apply.css (the canonical copy).
- */
+ * userscript instead. Keep these rules in sync with dom/apply.css (the canonical copy):
+ * same root anchors (claude.ai dropped the legacy `.prose`; .standard-markdown /
+ * .font-claude-response / [data-testid="user-message"] are the live containers, `.prose`
+ * and .font-claude-message kept as fallbacks) and the same TARGETED !important on exactly
+ * the two properties Claude hard-sets against us (unicode-bidi, text-align). */
 @-moz-document domain("claude.ai") {
-  :where(.prose) p,
-  :where(.prose) li,
-  :where(.prose) h1, :where(.prose) h2, :where(.prose) h3,
-  :where(.prose) h4, :where(.prose) h5, :where(.prose) h6,
-  :where(.prose) blockquote,
-  :where(.prose) td, :where(.prose) th,
-  :where(.prose) dt, :where(.prose) dd,
-  :where(.prose) figcaption, :where(.prose) caption {
-    unicode-bidi: plaintext;
-    text-align: start;
+  :where(.prose, .standard-markdown, .font-claude-response, .font-claude-message, [data-testid="user-message"])
+    :is(p, li, h1, h2, h3, h4, h5, h6, blockquote, dt, dd, figcaption, caption, td, th) {
+    unicode-bidi: plaintext !important;
+    text-align: start !important;
   }
 
   pre,
@@ -38,8 +35,9 @@
   [dir="ltr"] { direction: ltr; }
   table[dir="rtl"] { direction: rtl; }
 
-  :where(.prose) p,
-  :where(.prose) li {
+  /* Long unbreakable LTR tokens (URLs) inside RTL must not blow out the bubble. */
+  :where(.prose, .standard-markdown, .font-claude-response, .font-claude-message, [data-testid="user-message"])
+    :is(p, li) {
     overflow-wrap: anywhere;
   }
 }
