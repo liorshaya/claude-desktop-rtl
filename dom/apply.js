@@ -27,6 +27,31 @@ dlog('payload evaluated; document =', typeof document);
 const SETTLE_MS = 250; // §3.3: run the heavy pass only after the stream goes quiet.
 const MAX_NODES_PER_PASS = 400; // backstop so a giant transcript can't lock the thread.
 const DONE_ATTR = 'data-rtl-done';
+const SEEN_ATTR = 'data-rtl-seen'; // per-block content fingerprint (see contentFp)
+
+// §3.3 — "never let a settled block's direction change retroactively UNLESS its text content
+// truly changed". Stamps therefore carry a cheap content FINGERPRINT (the decision-relevant
+// text length — streaming only appends, so growth always changes it) instead of a boolean:
+// a decision made on a half-streamed block (the sync processAdded path, or a >250ms mid-stream
+// lull that fires the debounced pass) is re-evaluated when more content arrives, while a block
+// whose content didn't change short-circuits exactly as before. Our own wraps preserve
+// textContent byte-for-byte (§3.6), so they never invalidate a fingerprint themselves.
+function contentFp(text) {
+  return String(text.length);
+}
+
+// Undo a previously-applied RTL override (prose block or table cell) whose content grew away
+// from the override (e.g. "React הוא" streamed on into a majority-English sentence — §8.K says
+// English must never stay flipped). Reverses applyRtlOverride/applyCellRtlOverride exactly.
+function clearRtlOverride(el) {
+  el.removeAttribute('data-rtl-dir');
+  el.removeAttribute('dir');
+  if (el.style && el.style.removeProperty) {
+    el.style.removeProperty('direction');
+    el.style.removeProperty('unicode-bidi');
+    el.style.removeProperty('text-align');
+  }
+}
 
 // Idempotent + self-healing. Called from init AND every observer pass. The Claude web app
 // (React/Next) clears foreign <style> elements from <head> on render, so the desktop path
@@ -128,14 +153,19 @@ function processAdded(node) {
 // on rendered content). Layer 2: per-COLUMN alignment (alignColumns). Idempotent via
 // DONE_ATTR.
 function processTable(table) {
-  if (table.getAttribute(DONE_ATTR)) return;
   if (inEditable(table)) return; // a table being edited in the composer/edit box → don't touch
   if (table.closest('pre, code')) return; // a table inside a source/code view stays LTR
   const shape = readTableShape(table);
+  const fp = contentFp(shape.allCells.join(''));
+  const seen = table.getAttribute(DONE_ATTR);
+  if (seen === fp) return; // settled content → decision stands (§3.3)
   if (tableDir(shape.allCells, shape.headers) === 'rtl') table.setAttribute('dir', 'rtl');
+  // Streamed rows can flip the majority back (Hebrew header, then English body): undo OUR
+  // stale flip — only ours (seen), never an explicit dir that predates us.
+  else if (seen && table.getAttribute('dir') === 'rtl') table.removeAttribute('dir');
   alignColumns(table);
   overrideCellDirs(table); // §8.K per cell: fix a Latin/marker-opener majority-RTL cell
-  table.setAttribute(DONE_ATTR, '1');
+  table.setAttribute(DONE_ATTR, fp);
 }
 
 // §8.K, per cell — a cell that OPENS with Latin/marker but is majority-RTL ("React הוא
@@ -146,9 +176,15 @@ function overrideCellDirs(table) {
   const cells = qsa('th, td', table);
   for (let i = 0; i < cells.length && i < MAX_NODES_PER_PASS; i++) {
     const cell = cells[i];
-    if (cell.getAttribute('data-rtl-dir') || cell.getAttribute('dir')) continue;
+    const seen = cell.getAttribute(SEEN_ATTR);
+    if (!seen && cell.getAttribute('dir')) continue; // an explicit dir we didn't set
     if (cell.closest('pre, code')) continue;
-    if (plaintextOverrideDir(proseText(cell)) === 'rtl') applyCellRtlOverride(cell);
+    const t = proseText(cell);
+    const fp = contentFp(t);
+    if (seen === fp) continue; // settled content → decision stands (§3.3)
+    cell.setAttribute(SEEN_ATTR, fp);
+    if (plaintextOverrideDir(t) === 'rtl') applyCellRtlOverride(cell);
+    else if (cell.getAttribute('data-rtl-dir')) clearRtlOverride(cell); // grew away from it
   }
 }
 
@@ -171,6 +207,8 @@ function alignColumns(table) {
   for (let r = 0; r < cells.length; r++) {
     for (let c = 0; c < cells[r].length; c++) {
       if (dirs[c]) cells[r][c].setAttribute('data-rtl-col', dirs[c]);
+      // streamed rows can flip a column's majority — drop a stamp that no longer holds
+      else if (cells[r][c].getAttribute('data-rtl-col')) cells[r][c].removeAttribute('data-rtl-col');
     }
   }
 }
@@ -179,10 +217,15 @@ function alignColumns(table) {
 // "table"/text) gets tagged so the CSS renders it RTL per line. REAL code is left LTR
 // untouched — the engine's codeBlockIsProse is conservative (any code structure → code).
 function processCodeBlock(pre) {
-  if (pre.getAttribute(DONE_ATTR)) return;
   if (inEditable(pre)) return; // a fenced block being typed in the composer/edit box → leave it
-  if (codeBlockIsProse(pre.textContent || '')) pre.setAttribute('data-rtl-text', '');
-  pre.setAttribute(DONE_ATTR, '1');
+  const t = pre.textContent || '';
+  const fp = contentFp(t);
+  if (pre.getAttribute(DONE_ATTR) === fp) return; // settled content → decision stands (§3.3)
+  // Re-decide on content change: a fence that opened with Hebrew lines can turn out to be real
+  // code once its structure streams in (and vice versa) — data-rtl-text is only ever ours.
+  if (codeBlockIsProse(t)) pre.setAttribute('data-rtl-text', '');
+  else pre.removeAttribute('data-rtl-text');
+  pre.setAttribute(DONE_ATTR, fp);
 }
 
 // §6 — the interactive "ask user a question" widget. Give it a content-derived base direction
@@ -327,8 +370,9 @@ function inLtrIsland(node) {
 
 function wrapArrowsInBlock(block) {
   if (inNoInject(block)) return; // never inject into composer/edit box, ask-widget, <style>
-  if (block.getAttribute(ARROWS_ATTR) === '1') return;
-  block.setAttribute(ARROWS_ATTR, '1');
+  const fp = contentFp(block.textContent || '');
+  if (block.getAttribute(ARROWS_ATTR) === fp) return; // settled content → already handled (§3.3)
+  block.setAttribute(ARROWS_ATTR, fp);
   if (!hasMirrorArrow(block.textContent || '')) return;
   if (resolvedDir(proseText(block)) !== 'rtl') return; // mirror only where the block renders RTL
   const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT, {
@@ -443,8 +487,9 @@ function splitRelations(node) {
 const NUMS_ATTR = 'data-rtl-nums';
 function wrapSignedNumbersInBlock(block) {
   if (inNoInject(block)) return; // never inject into composer/edit box, ask-widget, <style>
-  if (block.getAttribute(NUMS_ATTR) === '1') return;
-  block.setAttribute(NUMS_ATTR, '1');
+  const fp = contentFp(block.textContent || '');
+  if (block.getAttribute(NUMS_ATTR) === fp) return; // settled content → already handled (§3.3)
+  block.setAttribute(NUMS_ATTR, fp);
   if (!signedNumberRuns(block.textContent || '').length) return;
   if (resolvedDir(proseText(block)) !== 'rtl') return; // only where the block renders RTL
   const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT, {
@@ -494,14 +539,19 @@ function splitSignedNumbers(node) {
 // ul/ol containers only need the marker side (their items self-handle). Never overwrite an
 // explicit dir.
 function processDirBlock(el) {
-  if (el.getAttribute('dir')) return;
   if (inEditable(el)) return; // a list/quote being TYPED in the composer → don't stamp dir
   if (el.closest('pre, code')) return; // inside a source/code view → stays LTR
+  const seen = el.getAttribute(SEEN_ATTR);
+  if (!seen && el.getAttribute('dir')) return; // an explicit dir we didn't set → respect it
   const t = proseText(el);
+  const fp = contentFp(t);
+  if (seen === fp) return; // settled content → decision stands (§3.3)
+  el.setAttribute(SEEN_ATTR, fp);
   if (plaintextOverrideDir(t) === 'rtl' && el.matches && el.matches('li, blockquote')) {
     applyRtlOverride(el); // content + bar both RTL
     return;
   }
+  if (el.getAttribute('data-rtl-dir')) clearRtlOverride(el); // content grew away from the override
   el.setAttribute('dir', resolvedDir(t) || 'auto'); // marker/bar follows the actual render
 }
 
@@ -579,12 +629,19 @@ function applyCellRtlOverride(cell) {
 // "React הוא ספרייה"). Then force RTL; otherwise leave it untouched (English is never
 // flipped — plaintextOverrideDir returns null for a majority-English block). Idempotent.
 function processProseDir(el) {
-  if (el.getAttribute('data-rtl-dir')) return; // already overridden by us
-  if (el.getAttribute('dir')) return; // respect an explicit dir we didn't set
   if (inEditable(el)) return; // a paragraph being TYPED in the composer → leave it alone
   if (el.closest('pre, code')) return; // source/code view → stays LTR
   if (el.closest('table')) return; // table cells get §8.K via overrideCellDirs (no text-align)
-  if (plaintextOverrideDir(proseText(el)) === 'rtl') applyRtlOverride(el);
+  const seen = el.getAttribute(SEEN_ATTR);
+  if (!seen && el.getAttribute('dir')) return; // respect an explicit dir we didn't set
+  const t = proseText(el);
+  const fp = contentFp(t);
+  if (seen === fp) return; // settled content → decision stands (§3.3)
+  el.setAttribute(SEEN_ATTR, fp);
+  if (plaintextOverrideDir(t) === 'rtl') applyRtlOverride(el);
+  // An override applied to a half-streamed prefix ("React הוא …") must be UNDONE when the
+  // block ends up majority-English — §8.K: English is never left flipped.
+  else if (el.getAttribute('data-rtl-dir')) clearRtlOverride(el);
 }
 
 function processRoot(root) {

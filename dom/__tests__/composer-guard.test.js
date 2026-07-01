@@ -210,7 +210,7 @@ test('a table inside an edit box is not processed; a rendered table is', () => {
   const rt = htable(rows);
   renderedHost(rt);
   I.processTable(rt);
-  assert.equal(rt.getAttribute('data-rtl-done'), '1', 'rendered table: processed (trigger fires)');
+  assert.notEqual(rt.getAttribute('data-rtl-done'), null, 'rendered table: processed (trigger fires)');
 });
 
 test('a fenced block inside an edit box is not tagged; a rendered Hebrew-prose fence is', () => {

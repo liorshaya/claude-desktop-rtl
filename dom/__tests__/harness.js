@@ -75,7 +75,11 @@ class MElement {
     this.nodeType = 1; this.tagName = tag.toUpperCase();
     this.attrs = Object.create(null); this.childNodes = []; this.parentNode = null;
     const map = Object.create(null);
-    this.style = { setProperty(k, v) { map[k] = v; }, getPropertyValue(k) { return map[k] || ''; } };
+    this.style = {
+      setProperty(k, v) { map[k] = v; },
+      getPropertyValue(k) { return map[k] || ''; },
+      removeProperty(k) { const v = map[k] || ''; delete map[k]; return v; },
+    };
   }
   get parentElement() { return this.parentNode && this.parentNode.nodeType === 1 ? this.parentNode : null; }
   get childElementCount() { return this.childNodes.filter((n) => n.nodeType === 1).length; }
