@@ -432,18 +432,30 @@ function relationRuns(text) {
 
   // Seed at every mirror-relation (skip tag brackets), every PREFIX operator, every standalone
   // math bracket, and every BINARY arithmetic operator; grow each to the whole expression.
+  // When a seed grows into a run, scanning RESUMES AT THE RUN'S END: every connector inside the
+  // run expands to a sub-span of it (chain growth is anchor-independent, and brackets are not
+  // connectors, so an inner seed can't escape), so re-expanding each one is pure duplicate work —
+  // quadratic on a long chain ("1+1+1+…" froze the renderer for seconds).
   const runs = [];
   for (let i = 0; i < len; ) {
     const cp = text.codePointAt(i);
     const w = cp > 0xffff ? 2 : 1;
     if (isMirroredMathRel(cp)) {
       const c = text[i];
-      if (!((c === '<' || c === '>') && inTag(i))) runs.push([expandLeft(i), expandRight(i + w)]);
+      if (!((c === '<' || c === '>') && inTag(i))) {
+        const e = expandRight(i + w);
+        runs.push([expandLeft(i), e]);
+        if (e > i + w) { i = e; continue; }
+      }
     } else if (isPrefixOp(cp)) {
       // A prefix operator's operand is on the RIGHT ("∑ x_i", "√(a²+b²)", "∀x ∈ ℝ", "¬p"). Isolate
       // [prefix … operand]; needs a right operand (a stray ∑, or ∑ before Hebrew prose, makes none).
       const e = expandRight(i + w);
-      if (e > i + w) runs.push([expandLeft(i), e]);
+      if (e > i + w) {
+        runs.push([expandLeft(i), e]);
+        i = e;
+        continue;
+      }
     } else if (OPENERS.indexOf(text[i]) !== -1) {
       // A STANDALONE bracket group with math content ("[a, b]", "(0, ∞)", "(3 × 5)", "{1, 2, 3}").
       let e = mathBracketEnd(i);
@@ -452,6 +464,8 @@ function relationRuns(text) {
         let s = i;
         while (s > 0 && isTermChar(ch(s - 1))) s -= 1; // a leading function name: "f(x, y)"
         runs.push([s, e]);
+        i = e;
+        continue;
       }
     } else if (isArithOp(cp) || isSetOp(cp)) {
       // An arithmetic/set operator seeds ONLY as a BINARY op (operands on both sides) whose run holds
@@ -470,7 +484,11 @@ function relationRuns(text) {
         const slice = text.slice(s, e);
         let hasMB = false;
         for (let p = s; p < e && !hasMB; p++) if (OPENERS.indexOf(ch(p)) !== -1 && mathBracketEnd(p) > p) hasMB = true;
-        if (s < i && e > i + w && (DIGITS.test(slice) || PREFIX_RE.test(slice) || WEAKVAL_RE.test(slice) || hasMB)) runs.push([s, e]);
+        if (s < i && e > i + w && (DIGITS.test(slice) || PREFIX_RE.test(slice) || WEAKVAL_RE.test(slice) || hasMB)) {
+          runs.push([s, e]);
+          i = e;
+          continue;
+        }
       }
     }
     i += w;

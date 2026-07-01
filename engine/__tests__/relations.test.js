@@ -174,3 +174,17 @@ test('relationRuns: realistic Hebrew prose lines', () => {
   assert.deepEqual(runs('הקבוצה ℕ ⊂ ℤ והאיבר x ∈ S.'), ['ℕ ⊂ ℤ', 'x ∈ S']); // set relations
   assert.deepEqual(runs('נתון ש-0 < x ≤ 4 לכל x.'), ['0 < x ≤ 4']);        // chained, in prose
 });
+
+test('relationRuns: a long operator chain is ONE run in linear time (quadratic-seed regression)', () => {
+  // Every '+' used to re-expand over the whole chain — O(n²): a ~10k-char chain froze the
+  // renderer for seconds. Scanning now resumes at each run's end. Output is unchanged (each
+  // inner seed's expansion is a sub-span of the outer run); only the duplicate work is gone.
+  const chain = 'π' + '+1'.repeat(5000); // 10,001 chars
+  const t0 = Date.now();
+  const r = relationRuns(chain);
+  const elapsed = Date.now() - t0;
+  assert.deepEqual(r, [[0, chain.length]], 'the whole chain is one isolated run');
+  assert.ok(elapsed < 1000, `linear-time scan (took ${elapsed}ms; quadratic took ~5s)`);
+  // several chains in one line stay separate runs, with prose between them untouched
+  assert.deepEqual(runs('סכום: 1+2=3 וגם 4+5=9 בסדר'), ['1+2=3', '4+5=9']);
+});
