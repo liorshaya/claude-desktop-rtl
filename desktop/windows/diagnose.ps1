@@ -39,7 +39,10 @@ if ($pkg) {
 }
 $squirrel = Join-Path $env:LOCALAPPDATA 'AnthropicClaude'
 if (Test-Path $squirrel) {
-  $appDirs = Get-ChildItem $squirrel -Directory -Filter 'app-*' -ErrorAction SilentlyContinue | Sort-Object Name -Descending
+  # [version]-aware sort (as in patch.ps1): a string sort ranks app-1.9.0 above app-1.15200.0
+  # and the report inspects the WRONG (older) install.
+  $appDirs = Get-ChildItem $squirrel -Directory -Filter 'app-*' -ErrorAction SilentlyContinue |
+    Sort-Object { [version]($_.Name -replace '^app-','') } -Descending
   if ($appDirs) {
     KV "Squirrel dir" $appDirs[0].FullName
     if (-not $pkg) { $model = 'Squirrel'; $base = $appDirs[0].FullName }
