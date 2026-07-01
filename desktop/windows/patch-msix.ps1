@@ -222,6 +222,13 @@ function Remove-CertPrivateKey($cert) {
           $rsa = [System.Security.Cryptography.X509Certificates.RSACertificateExtensions]::GetRSAPrivateKey($found)
           if ($rsa -is [System.Security.Cryptography.RSACng]) { $rsa.Key.Delete() }
           elseif ($rsa -is [System.Security.Cryptography.RSACryptoServiceProvider]) { $rsa.PersistKeyInCsp = $false; $rsa.Clear() }
+          elseif (-not $rsa) {
+            # New-FittingCert may have picked the ECDSA P-256 config (when the RSA cert did not
+            # fit the hole): GetRSAPrivateKey is $null then, and skipping key deletion here used
+            # to ORPHAN a machine-trusted code-signing key in the CNG store after $my.Remove().
+            $ec = [System.Security.Cryptography.X509Certificates.ECDsaCertificateExtensions]::GetECDsaPrivateKey($found)
+            if ($ec -is [System.Security.Cryptography.ECDsaCng]) { $ec.Key.Delete() }
+          }
         } catch { Log "note: could not delete key material: $($_.Exception.Message)" }
       }
       $my.Remove($found)
