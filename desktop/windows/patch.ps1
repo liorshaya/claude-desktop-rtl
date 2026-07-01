@@ -58,6 +58,24 @@ function Invoke-Asar  { if ($NodeModules) { & $NodeExe (Resolve-Bin '@electron\a
 function Invoke-Fuses { if ($NodeModules) { & $NodeExe (Resolve-Bin '@electron\fuses') @args } else { npx --yes @electron/fuses @args } }
 
 function Log($m){ Write-Host "patch: $m" }
+
+# Read-only: is the RTL payload actually inside app.asar? (Chunked marker scan, same as
+# watch.ps1's Test-Patched / patch-msix.ps1's Test-AsarPatched.) -Status must report THIS,
+# not backup presence: -Restore keeps the *.crtl-bak files, so "backups exist" says nothing
+# about whether the install is currently patched.
+function Test-AsarPatched($asar) {
+  if (-not (Test-Path $asar)) { return $false }
+  try { $fs = [IO.File]::OpenRead($asar) } catch { return $false }
+  try {
+    $enc = [Text.Encoding]::GetEncoding('ISO-8859-1'); $buf = New-Object byte[] (4MB); $tail = ''
+    while (($n = $fs.Read($buf,0,$buf.Length)) -gt 0) {
+      $s = $tail + $enc.GetString($buf,0,$n)
+      if ($s.IndexOf($Marker) -ge 0) { return $true }
+      if ($s.Length -ge $Marker.Length) { $tail = $s.Substring($s.Length - $Marker.Length) }
+    }
+  } finally { $fs.Close() }
+  return $false
+}
 function Die($m){ throw $m }
 
 # --- locate the Squirrel install (highest app-* version) ---
@@ -130,8 +148,8 @@ try {
   # --- STATUS ---
   if ($Status) {
     Log "install : $($ins.Dir)  (v$($ins.Ver))"
-    $patched = (Test-Path "$($ins.Exe).crtl-bak") -and (Test-Path "$($ins.Asar).crtl-bak")
-    Log "patched : $patched  (.crtl-bak backups present)"
+    $patched = Test-AsarPatched $ins.Asar
+    Log "patched : $patched  (payload marker in app.asar)"
     $fuse = (Invoke-Fuses read --app $ins.Exe) | Out-String
     $line = ($fuse -split "`n" | Where-Object { $_ -match 'EnableEmbeddedAsarIntegrityValidation' }) -join ''
     Log "fuse    : $($line.Trim())"

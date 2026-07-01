@@ -293,8 +293,10 @@ try {
   if ($Status) {
     Log "package : $($ins.Pkg)"
     Log "app dir : $($ins.App)"
-    $patched = (Test-Path "$($ins.Exe).crtl-bak") -and (Test-Path "$($ins.Asar).crtl-bak")
-    Log "patched : $patched  (.crtl-bak backups present)"
+    # Backups survive -Restore by design, so their presence says nothing about the current
+    # state - read the truth from the asar itself (same scan -Verify uses).
+    $patched = Test-AsarPatched $ins.Asar
+    Log "patched : $patched  (payload marker in app.asar)"
     $rootCert = Get-ChildItem Cert:\LocalMachine\Root -ErrorAction SilentlyContinue | Where-Object { $_.FriendlyName -eq $CertFriendly }
     Log "rtl cert in Trusted Root : $([bool]$rootCert)"
     $svc = Get-Service -Name 'CoworkVMService' -ErrorAction SilentlyContinue
