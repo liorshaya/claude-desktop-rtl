@@ -281,7 +281,9 @@ struct ContentView: View {
     private var workingRow: some View {
         HStack(spacing: 7) {
             ProgressView().controlSize(.small)
-            Text("Working…").font(.caption).foregroundStyle(.secondary)
+            Text(runner.busyTask.isEmpty ? "Working…" : runner.busyTask)
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)   // wrap, never truncate
             Spacer()
         }
         .transition(.opacity)

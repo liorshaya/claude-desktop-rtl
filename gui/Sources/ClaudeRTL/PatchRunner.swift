@@ -27,6 +27,7 @@ final class PatchRunner: ObservableObject {
     @Published var status = AppStatus()
     @Published var log = ""
     @Published var busy = false
+    @Published var busyTask = ""   // what the spinner is doing — install/uninstall/open differ a lot in duration
     @Published var updateCheck: UpdateCheck = .idle
     @Published var launchAtLogin = false
 
@@ -101,14 +102,31 @@ final class PatchRunner: ObservableObject {
         launchAtLogin = (SMAppService.mainApp.status == .enabled)
     }
 
-    func install() async { busy = true; log = ""; await runPatch(["--install"]); await refresh(); busy = false }
-    func uninstall() async { busy = true; await runPatch(["--uninstall"]); await refresh(); busy = false }
-    func setWatch(_ on: Bool) async { busy = true; await runPatch([on ? "--watch" : "--unwatch"]); await refresh(); busy = false }
+    func install() async {
+        busy = true; busyTask = "Installing RTL — copying and re-signing Claude can take a minute…"
+        log = ""
+        await runPatch(["--install"])
+        await refresh()
+        busy = false; busyTask = ""
+    }
+    func uninstall() async {
+        busy = true; busyTask = "Uninstalling…"
+        await runPatch(["--uninstall"])
+        await refresh()
+        busy = false; busyTask = ""
+    }
+    func setWatch(_ on: Bool) async {
+        busy = true; busyTask = on ? "Enabling auto re-apply…" : "Disabling auto re-apply…"
+        await runPatch([on ? "--watch" : "--unwatch"])
+        await refresh()
+        busy = false; busyTask = ""
+    }
     // The original and the patched copy share a userData dir, so they can't run together —
     // quit the original, wait for it to fully exit (Cowork cleanup can take a moment), then
     // open Claude-RTL.
     func openPatched() async {
-        busy = true
+        busy = true; busyTask = "Opening Claude-RTL — quitting the original first…"
+        defer { busyTask = "" }
         let rtl = NSHomeDirectory() + "/Applications/Claude-RTL.app"
         let m = "/Applications/Claude.app/Contents/MacOS/"
         _ = await run("/bin/bash", ["-c", """
