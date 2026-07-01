@@ -50,7 +50,10 @@ for (const name of fs.readdirSync(viteDir)) {
   if (!name.endsWith('.js')) continue;
   const f = path.join(viteDir, name);
   if (!fs.statSync(f).isFile()) continue;
-  if (path.resolve(f) === mainAbs) continue;            // main entry handled separately
+  // Windows filesystems are case-insensitive; a casing difference between package.json
+  // "main" and the on-disk name must not sneak the FULL payload into the main entry
+  // (= black screen). patch.sh uses -ef (inode identity); lowercase both sides here.
+  if (path.resolve(f).toLowerCase() === mainAbs.toLowerCase()) continue; // main entry handled separately
   const buf = fs.readFileSync(f);
   if (buf.includes(MARKER)) { skipped++; continue; }    // idempotent: already patched
   fs.writeFileSync(f, Buffer.concat([payloadBuf, buf]));
