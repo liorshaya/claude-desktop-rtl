@@ -123,8 +123,18 @@ function Install-Watcher {
   $cmd = 'powershell -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "{0}"' -f $WatchPs1
   New-Item -Path $RunKey -Force | Out-Null
   Set-ItemProperty -Path $RunKey -Name $RunName -Value $cmd
-  Start-Process -FilePath 'powershell' -WindowStyle Hidden -ArgumentList @('-NoProfile','-WindowStyle','Hidden','-ExecutionPolicy','Bypass','-File',$WatchPs1) | Out-Null
-  Log "watcher installed (logon) and started - re-applies RTL after a Claude update."
+  # Never start a SECOND resident watcher: re-running -Watch used to spawn one per invocation
+  # (the Run key is singular, but each extra process lived until logoff), and two concurrent
+  # watchers can re-patch the same app.asar at once. Same match rule as Remove-Watcher.
+  $already = @(Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -and $_.CommandLine.Contains($WatchPs1) })
+  if ($already.Count -gt 0) {
+    Log "watcher already running (PID $($already[0].ProcessId)) - logon entry refreshed, not starting another."
+  } else {
+    Start-Process -FilePath 'powershell' -WindowStyle Hidden -ArgumentList @('-NoProfile','-WindowStyle','Hidden','-ExecutionPolicy','Bypass','-File',$WatchPs1) | Out-Null
+    Log "watcher started - re-applies RTL after a Claude update."
+  }
+  Log "watcher installed (logon)."
   Log "log: $env:LOCALAPPDATA\claude-rtl\watch.log   (remove with: patch.ps1 -Unwatch)"
 }
 
