@@ -73,6 +73,11 @@
         <CheckBox x:Name="AutoToggle" Margin="3,13,0,0" FontSize="12.5" Foreground="{StaticResource Ink}"
                   Content="Keep RTL after Claude updates" Click="OnToggle" />
 
+        <!-- Claude-is-running notice: applying the patch will close it (patch.ps1 Stop-Claude) -->
+        <TextBlock x:Name="RunWarn" Margin="3,10,0,0" FontSize="11.5" TextWrapping="Wrap"
+                   Foreground="{StaticResource Amber}" Visibility="Collapsed"
+                   Text="Claude is running — it will be closed when applying RTL." />
+
         <!-- Busy -->
         <TextBlock x:Name="BusyText" Margin="3,10,0,0" FontSize="11.5" Foreground="{StaticResource Brand}"
                    Visibility="Collapsed" Text="Working..." />

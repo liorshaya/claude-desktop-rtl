@@ -74,6 +74,10 @@ public partial class PopupWindow : Window
         SetDot(DotCowork, ValCowork, _st.CoworkOk, na: _st.Kind == InstallKind.Squirrel);
         SetDot(DotAuto, ValAuto, _st.AutoUpdateOn);
 
+        // Applying the patch stops a running Claude (patch scripts' Stop-Claude) — say so
+        // BEFORE the click, like the macOS panel does, instead of silently closing their app.
+        RunWarn.Visibility = !none && _st.ClaudeRunning ? Visibility.Visible : Visibility.Collapsed;
+
         AutoToggle.IsChecked = _st.AutoUpdateOn;
         AutoToggle.IsEnabled = !none && !_busy;
 
