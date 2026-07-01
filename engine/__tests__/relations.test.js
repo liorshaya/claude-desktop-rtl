@@ -188,3 +188,13 @@ test('relationRuns: a long operator chain is ONE run in linear time (quadratic-s
   // several chains in one line stay separate runs, with prose between them untouched
   assert.deepEqual(runs('סכום: 1+2=3 וגם 4+5=9 בסדר'), ['1+2=3', '4+5=9']);
 });
+
+test('relationRuns: a math-bracket operand keeps its trailing power inside a chain (skip regression)', () => {
+  // With seed-skipping, the standalone bracket seed no longer fires INSIDE a run, so the
+  // operand scanner itself must own the trailing precomposed power. Before the follow-up
+  // fix, "x < (a+b)²" lost its ² (run ended at the closer).
+  assert.deepEqual(runs('x < (a+b)²'), ['x < (a+b)²']);
+  assert.deepEqual(runs('נתון ש-x < (a+b)² תמיד'), ['x < (a+b)²']);
+  assert.deepEqual(runs('a × (b+c)² ÷ d'), ['a × (b+c)² ÷ d']); // chain continues past the power
+  assert.deepEqual(runs('f(a+b)² = c'), ['f(a+b)² = c']);       // mathy function call too
+});

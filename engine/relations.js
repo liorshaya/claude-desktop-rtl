@@ -366,10 +366,12 @@ function relationRuns(text) {
     { const e = absOpenEnd(i); if (e > i) { i = e; while (i < len && isSuffix(ch(i))) i += 1; return i; } } // |x − 3|
     // a bracket group is ONE operand: "(3 × 5)", "(a + b)", "[a, b]", "{1, 2}"
     if (OPENERS.indexOf(ch(i)) !== -1) {
+      const open = i;
       const close = bracketSpanEnd(i);
       if (close > i) {
         i = close;
         while (i < len && isSuffix(ch(i))) i += 1;
+        i = mathBracketPowerEnd(open, close, i);
         return i;
       }
     }
@@ -390,9 +392,31 @@ function relationRuns(text) {
     }
     if (i === body0) return start; // a lone currency/sign with no number body → not an operand
     // a function call: an identifier immediately followed by a bracket group — "f(x)", "sin(θ)"
-    if (OPENERS.indexOf(ch(i)) !== -1) { const close = bracketSpanEnd(i); if (close > i) i = close; }
+    if (OPENERS.indexOf(ch(i)) !== -1) {
+      const open = i;
+      const close = bracketSpanEnd(i);
+      if (close > i) {
+        i = close;
+        while (i < len && isSuffix(ch(i))) i += 1; // trailing suffix(es): %, °, currency
+        i = mathBracketPowerEnd(open, close, i);
+        return i;
+      }
+    }
     while (i < len && isSuffix(ch(i))) i += 1; // trailing suffix(es): %, °, currency
     return i;
+  }
+  // A MATH bracket's trailing precomposed power belongs to its operand ("(a+b)²", "f(a+b)²").
+  // The STANDALONE bracket seed extends over these script chars; before seed-skipping, that
+  // seed also fired INSIDE a connector run and the merge added the power to the union. Now
+  // that inner seeds are skipped, the operand scanner must include it itself — gated on the
+  // exact same mathBracketEnd condition, and taking the max with the suffix end (they never
+  // both apply: script chars and suffixes are disjoint sets), so runs stay byte-identical to
+  // the pre-skip union. Plain calls like "f(x)" are NOT math brackets → unchanged.
+  function mathBracketPowerEnd(open, close, suffixEnd) {
+    if (mathBracketEnd(open) <= open) return suffixEnd;
+    let e = close;
+    while (e < len && isScriptChar(ch(e))) e += 1;
+    return e > suffixEnd ? e : suffixEnd;
   }
   // Grow the run leftward from the seed over (CONNECTOR WS? TERM) pairs.
   function expandLeft(relStart) {
