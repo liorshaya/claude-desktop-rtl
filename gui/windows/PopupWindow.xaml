@@ -6,7 +6,7 @@
         SizeToContent="Height" Width="360"
         FontFamily="{StaticResource UiFont}" Foreground="{StaticResource Ink}"
         TextOptions.TextFormattingMode="Ideal" UseLayoutRounding="True"
-        Deactivated="OnDeactivated">
+        Deactivated="OnDeactivated" KeyDown="OnKeyDown">
 
   <Border Margin="12" CornerRadius="14" Background="{StaticResource CardBg}">
     <Border.Effect>

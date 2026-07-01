@@ -136,6 +136,13 @@ public partial class PopupWindow : Window
         if (!_busy) Hide();
     }
 
+    // Esc dismisses, like any transient popup — the only pointer-free way out was Alt+F4.
+    // (A running operation keeps the popup up, same rule as Deactivated.)
+    private void OnKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key == System.Windows.Input.Key.Escape && !_busy) { e.Handled = true; Hide(); }
+    }
+
     private async Task RunOp(Func<Task<int>> op, string label)
     {
         if (_busy || _st.Kind == InstallKind.None) return;
