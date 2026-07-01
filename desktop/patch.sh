@@ -105,8 +105,9 @@ cmd_unwatch() {
 cmd_install() {
   # Trust gate (§11): verify signed payload + scripts before doing anything. 0=verified,
   # 2=unsigned (dev), 1=tampered. Strict mode refuses an unsigned build too.
+  local vrc=2
   if [ -f "$SCRIPT_DIR/verify.sh" ]; then
-    local vrc=0
+    vrc=0
     bash "$SCRIPT_DIR/verify.sh" || vrc=$?
     if [ "$vrc" -eq 1 ]; then
       die "integrity check failed — refusing to patch. Re-run desktop/sign.sh after legitimate changes."
@@ -122,6 +123,12 @@ cmd_install() {
 
   if [ -n "${CLAUDE_RTL_PAYLOAD:-}" ]; then
     log "using bundled payload ($PAYLOAD)…"
+  elif [ "$vrc" -eq 0 ] && [ -f "$PAYLOAD" ]; then
+    # Signed build: inject the payload the manifest just verified. Rebuilding here would
+    # replace it with output from engine/dom SOURCES, which the manifest does NOT cover —
+    # "integrity verified" must describe the bytes that actually get injected (§11).
+    # After a legitimate source change, re-run desktop/sign.sh (which rebuilds + re-signs).
+    log "using the signature-verified payload ($PAYLOAD)…"
   else
     log "building payload…"
     ( cd "$REPO_ROOT" && node build/build-payload.js >/dev/null )
