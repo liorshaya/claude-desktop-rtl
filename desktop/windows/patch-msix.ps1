@@ -432,8 +432,20 @@ try {
     }
 
     Log "writing fuses (EnableEmbeddedAsarIntegrityValidation=off)..."
-    Invoke-Fuses write --app $ins.Exe EnableEmbeddedAsarIntegrityValidation=off | Out-Null
-    if ($LASTEXITCODE -ne 0) { Die "fuses write failed (exit $LASTEXITCODE)." }
+    # The fuses write rewrites Claude.exe ON DISK, and Windows refuses to modify a running
+    # executable's image (EBUSY). Stop-Claude ran once before the slow extract/repack above, so
+    # Claude can have relaunched since (and cowork-svc pins Claude.exe's cert, holding a read
+    # handle). Mirror the cert-dance's re-sign of this same exe: stop Cowork once, then kill
+    # Claude and retry a few times so a transient relaunch can't fail the whole patch.
+    Stop-Cowork
+    for ($attempt = 1; $attempt -le 6; $attempt++) {
+      Stop-Claude
+      Invoke-Fuses write --app $ins.Exe EnableEmbeddedAsarIntegrityValidation=off | Out-Null
+      if ($LASTEXITCODE -eq 0) { break }
+      if ($attempt -eq 6) { Die "fuses write failed (exit $LASTEXITCODE) - Claude.exe stayed locked after 6 attempts." }
+      Log "  fuses write failed (attempt $attempt/6 - Claude.exe likely relaunched and locked); re-killing Claude and retrying..."
+      Start-Sleep -Milliseconds 800
+    }
   }
   finally {
     Remove-Item $work -Recurse -Force -ErrorAction SilentlyContinue

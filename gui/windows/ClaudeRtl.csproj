@@ -11,7 +11,7 @@
     <RootNamespace>ClaudeRtl</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
-    <Version>0.2.15</Version>
+    <Version>0.2.16</Version>
     <!-- Single-file + WPF + trimming has historical launch-crash bugs (docs/WINDOWS.md sec 6):
          publish single-file WITHOUT trimming. Dev builds stay framework-dependent (fast). -->
   </PropertyGroup>
