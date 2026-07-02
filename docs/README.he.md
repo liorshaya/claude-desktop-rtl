@@ -15,150 +15,215 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/liorshaya/claude-desktop-rtl/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/liorshaya/claude-desktop-rtl?label=release&color=d4572a"></a>
+  <img alt="License" src="https://img.shields.io/badge/license-MIT-3b82f6">
   <img alt="macOS" src="https://img.shields.io/badge/macOS-13%2B-000000?logo=apple&logoColor=white">
   <img alt="Windows" src="https://img.shields.io/badge/Windows-10%20%2F%2011-0078D6?logo=windows&logoColor=white">
   <img alt="Browser" src="https://img.shields.io/badge/browser-any%20OS%20(userscript)-4c9a2a">
-  <img alt="License" src="https://img.shields.io/badge/license-MIT-3b82f6">
   <img alt="Network" src="https://img.shields.io/badge/network-zero-16a34a">
-  <img alt="PRs" src="https://img.shields.io/badge/PRs-welcome-d4572a">
 </p>
 
 <div dir="rtl" align="right">
 
 ---
 
-Claude כותב עברית וערבית יפות — אבל מרנדר אותן **משמאל לימין**: נקודות בצד הלא נכון, סימני פיסוק שקופצים לקצה השורה, טבלאות שזורמות הפוך. **Claude RTL** מתקן את זה בכל מקום שבו Claude רץ, **בלי לגעת בטקסט שלך ובלי לגעת ברשת**.
+**Claude RTL גורם לעברית, ערבית ופרסית להתרנדר נכון — מימין לשמאל — בכל מקום שבו Claude רץ, בלי לגעת בטקסט שלך ובלי לגעת ברשת.** בלי זה, Claude כותב עברית יפה ואז מציג אותה משמאל לימין: נקודות בצד הלא נכון, פיסוק שקופץ לקצה השורה, טבלאות שזורמות הפוך.
 
 <p align="center">
   <img src="../assets/language/claude-rtl-comparison.png" alt="אותה תשובה של Claude בלי ועם Claude RTL — טבלאות, רשימות וטקסט עברי מרונדרים משמאל לימין (שבור) מול ימין לשמאל (תקין)" width="92%">
 </p>
 
 <p align="center">
-  <sub><b>בלי</b> RTL אותה תשובה מרונדרת משמאל לימין — עמודות טבלה הפוכות, פיסוק בצד הלא נכון. <b>איתו</b>, כל בלוק נקרא נכון.</sub>
+  <sub><b>בלי</b> Claude RTL התשובה מרונדרת משמאל לימין — עמודות טבלה הפוכות, פיסוק בצד הלא נכון. <b>איתו</b>, כל בלוק נקרא נכון.</sub>
 </p>
 
-## למה זה שונה
+## למה זה חשוב
 
-- 🎯 **כיוון per-block, כמו שצריך.** כל פסקה, רשימה, טבלה וציטוט מחליטים על הכיוון של **עצמם** לפי התוכן של **עצמם**. בלוקים באנגלית נשארים LTR ובלוקים בעברית מתהפכים RTL — **באותו מסמך**, בלי היפוך גלובלי (הבאג שיש לכל כלי אחר).
-- 🔒 **אפס רשת. אפס טלמטריה. אפס אחסון נתונים.** השיחות שלך לא עוזבות את המחשב. העתקה ו‑Ctrl-F נשארים **בייט‑לבייט** — לעולם לא מזריקים תווי יוניקוד נסתרים.
-- 🛡️ **בטוח מעצם הבנייה.** ה‑Claude המקורי שלך **לעולם לא משתנה**. אנחנו מתקנים עותק נפרד, והוא **שורד עדכוני Claude אוטומטית**.
-- 🖥️ **דסקטופ *וגם* דפדפן, מנוע אחד.** אפליקציית menu-bar ב‑macOS ואפליקציית tray ב‑Windows ל‑Claude Desktop, וגם userscript ל‑claude.ai בכל דפדפן — כולם חולקים בדיוק את אותו מנוע bidi.
-- 🧪 **ליבה טהורה ובדוקה.** האינטליגנציה (`engine/`) נטולת‑DOM ומכוסה ב‑corpus של מקרי קצה, מנותקת מאופן ההפצה.
-
-## מה זה מטפל
-
-| משטח | התנהגות |
-|---|---|
-| Prose (פסקאות, כותרות) | כיוון per-block לפי first-strong של הדפדפן |
-| רשימות (כולל מקוננות) | markers + הזחה בצד התוכן; כיוון חכם לכל פריט |
-| טבלאות | סדר העמודות לפי הכותרת; כל תא מתיישר לטבלה |
-| ציטוטים | הפס/הזחה עוברים לצד התוכן |
-| מספרים, מטבע, %, תאריכים | מסודרים נכון; לעולם לא כופים שורה עברית ל‑LTR |
-| חצים (`→`) ב‑RTL | מתהפכים ויזואלית — התו עצמו לא משתנה |
-| בלוקי קוד | נשארים **LTR** במכוון (RTL היה משבר תחביר) |
-| תיבות קלט/עריכה | `dir="auto"`, מיידי, בלי ריצוד |
-| מסמך מעורב אנגלית/עברית | כל בלוק מחליט לעצמו — בלי היפוך גלובלי |
+- 🎯 **כיוון לכל בלוק, כמו שצריך.** כל פסקה, רשימה, טבלה וציטוט מחליטים על הכיוון של **עצמם** לפי התוכן של **עצמם**. בלוקים באנגלית נשארים LTR ובלוקים בעברית מתהפכים RTL — **באותו מסמך**, בלי היפוך גלובלי (הבאג שיש לכל כלי אחר).
+- 🔒 **אפס רשת. אפס טלמטריה. אפס אחסון נתונים.** השיחות שלך לא עוזבות את המחשב. העתקה ו‑Ctrl-F נשארים **בייט‑לבייט** — לעולם לא מוזרקים תווי יוניקוד נסתרים.
+- 🛡️ **בטוח מעצם הבנייה.** ב‑macOS ה‑Claude המקורי **לעולם לא משתנה** (נבנה עותק מתוקן נפרד); ב‑Windows המקור **מגובה קודם** וקליק אחד משחזר אותו.
+- 🖥️ **דסקטופ *וגם* דפדפן, מנוע אחד.** אפליקציית שורת‑תפריט ב‑macOS, אפליקציית מגש (tray) ב‑Windows, ו‑userscript ל‑claude.ai בכל דפדפן — כולם חולקים בדיוק את אותו מנוע bidi.
+- 🧪 **ליבה טהורה ובדוקה.** אינטליגנציית ה‑bidi‏ (`engine/`) נטולת‑DOM ומכוסה ב‑corpus של מקרי קצה, מנותקת מאופן ההפצה.
 
 ## ✅ פלטפורמות נתמכות
 
-| משטח | דרישות |
+| פלטפורמה | דרישות |
 |---|---|
-| 🍎 **macOS Desktop** | macOS 13 (Ventura) ומעלה. ה‑`.dmg` המוכן הוא ל‑Apple Silicon; מחשבי Intel יכולים לבנות מהמקור. |
-| 🪟 **Windows Desktop** | Windows 10 או 11 (64‑bit). מתקן **את שתי** ההתקנות של Claude — גם המתקין הקלאסי מ‑claude.ai וגם גרסת ה‑Microsoft Store (MSIX). |
-| 🌐 **דפדפן — claude.ai** | כל מערכת הפעלה. Chrome, Edge, Firefox או Safari עם מנהל userscript. |
+| 🍎 **macOS Desktop** | macOS 13 (Ventura) ומעלה. ה‑`.dmg` המוכן הוא ל‑Apple Silicon; מחשבי Intel בונים מהמקור. |
+| 🪟 **Windows Desktop — המתקין מ‑claude.ai** | Windows 10 / 11 (‏64‑bit), Claude שהותקן מ‑claude.ai (ה‑`.exe` הקלאסי). |
+| 🏪 **Windows Desktop — Microsoft Store** | Windows 10 / 11 (‏64‑bit), Claude מחנות Microsoft‏ (MSIX). אישור מנהל חד‑פעמי. |
+| 🌐 **דפדפן — claude.ai** | כל מערכת הפעלה. Chrome‏, Edge‏, Firefox או Safari עם מנהל userscript. |
 
 ## 🚀 התקנה
 
 <p align="center">
-  <img src="../assets/language/claude-rtl-showcase.png" alt="המנהל של Claude RTL — אפליקציית menu-bar ב‑macOS ואפליקציית tray ב‑Windows, שתיהן מציגות ‏“RTL is active”" width="80%">
+  <img src="../assets/language/claude-rtl-showcase.png" alt="המנהל של Claude RTL — אפליקציית שורת-תפריט ב-macOS ואפליקציית מגש ב-Windows, שתיהן מציגות “RTL is active”" width="80%">
 </p>
 
 <p align="center">
-  <sub>המנהל בקליק אחד — ב‑<b>macOS</b> (שורת התפריט) וב‑<b>Windows</b> (שורת המשימות). מתקין, מעדכן אוטומטית ומסיר RTL, בלי טרמינל.</sub>
+  <sub>המנהל בקליק אחד — ב‑<b>macOS</b> (שורת התפריט) וב‑<b>Windows</b> (המגש). מתקין, מעדכן אוטומטית ומסיר RTL, בלי טרמינל.</sub>
 </p>
 
-### macOS Desktop — הדרך הקלה (מומלץ)
+### 🍎 macOS
 
-אפליקציית menu-bar מתקינה, מעדכנת ומסירה RTL בקליק. **לא צריכה Node ולא טרמינל**.
+1. הורידו את ה‑**`.dmg`** מ‑[הגרסה האחרונה](https://github.com/liorshaya/claude-desktop-rtl/releases/latest) וגררו את **Claude RTL** לתוך **Applications**.
+2. *בפתיחה הראשונה בלבד:* קליק‑ימני על האפליקציה → **Open** → **Open** *(ב‑macOS Sequoia‏: System Settings ‏← Privacy & Security ‏← “Open Anyway”)*. חד‑פעמי, כי האפליקציה חתומה ad-hoc ולא עברה notarization של Apple.
+3. לחצו **Install RTL**. macOS יבקש סיסמת keychain פעם אחת → **Always Allow**.
+4. לחצו **Open Claude-RTL**.
 
-**אפשרות א׳ — הורדת האפליקציה** (הכי מהיר)
+**שורת פקודה** (מקבילה, או לבניית האפליקציה בעצמכם — דורש Node ו‑Xcode CLT):
 
-1. הורד את **`Claude-RTL.dmg`** מ‑[הגרסה האחרונה](https://github.com/liorshaya/claude-desktop-rtl/releases/latest).
-2. פתח וגרור את **Claude RTL** לתוך **Applications**.
-3. *בפתיחה הראשונה בלבד:* קליק‑ימני על האפליקציה → **Open** → **Open**. *(macOS Sequoia: System Settings → Privacy & Security → “Open Anyway”.)* הצעד החד‑פעמי הזה קיים כי האפליקציה open-source וחתומה ad-hoc, לא notarized של Apple — אפשרות ב׳ עוקפת אותו לגמרי.
-
-**אפשרות ב׳ — בנייה מהמקור** (בלי אזהרת Gatekeeper)
+<div dir="ltr">
 
 ```bash
 git clone https://github.com/liorshaya/claude-desktop-rtl.git
-cd claude-desktop-rtl/gui && ./build.sh          # בנייה חד-פעמית (צריך Node + Xcode CLT)
-open "dist/Claude RTL.app"
+cd claude-desktop-rtl
+desktop/patch.sh --install     # builds a patched copy at ~/Applications/Claude-RTL.app
+desktop/patch.sh --status      # verify
+# GUI app instead: cd gui && ./build.sh && open "dist/Claude RTL.app"
 ```
 
-ואז, מתוך האפליקציה:
-1. לחץ **Install RTL** — היא מתקנת עותק ב‑`~/Applications/Claude-RTL.app`.
-2. macOS יבקש סיסמת keychain פעם אחת → **Always Allow** *(המחשב שלך, ה‑keychain שלך)*.
-3. לחץ **Open Claude-RTL**. זהו — RTL חלק.
+</div>
 
-הפעל את **“Keep RTL after Claude updates”** והוא יחיל את עצמו מחדש בכל עדכון של Claude. **Check for updates** (תחת *Details*) מושך גרסאות חדשות של האפליקציה עצמה.
+**✔ התוצאה הצפויה:** התג באפליקציה מציג **“RTL is active”**, ו‑`--status` מדפיס `patched : ~/Applications/Claude-RTL.app (v…) — installed`. ה‑Claude המקורי ב‑`/Applications` לעולם לא נגוע.
 
-> ה‑Claude המקורי ב‑`/Applications` לעולם לא נגע. “Open Claude-RTL” סוגר קודם את המקורי (הם לא יכולים לרוץ יחד). חלון ראשון לבן? צא (⌘Q) ופתח שוב.
+### 🪟 Windows — הותקן מ‑claude.ai
 
-### Windows Desktop
+1. הורידו את **`ClaudeRTL-Setup-…-win-x64.exe`** מ‑[הגרסה האחרונה](https://github.com/liorshaya/claude-desktop-rtl/releases/latest) והריצו — התקנה **per-user**, בלי הרשאות מנהל ובלי שום דרישה מוקדמת (‏runtime נייד מצורף למתקין).
+2. הפעילו את **Claude RTL** מתפריט ההתחלה ולחצו **Install RTL**. המקור מגובה קודם אל `‎*.crtl-bak`.
+3. פתחו את Claude.
 
-אפליקציית tray מתקינה, מעדכנת ומסירה RTL — **בלי Node, בלי טרמינל, ובלי להתקין שום דבר מראש** (runtime נייד מצורף למתקין).
+**שורת פקודה** (מקבילה — דורשת Node כשמריצים מתוך checkout של git):
 
-1. הורד את **`ClaudeRTL-Setup.exe`** מ‑[הגרסה האחרונה](https://github.com/liorshaya/claude-desktop-rtl/releases/latest) והרץ. זו התקנה **per-user** — בלי הרשאות מנהל.
-2. הפעל את **Claude RTL** מתפריט ההתחלה ולחץ על הכפתור כדי לתקן את Claude. האפליקציה מזהה איך Claude מותקן ומחילה RTL במקום, עם גיבוי המקור קודם.
-3. פתח את Claude — עברית, ערבית ופרסית מרונדרות RTL.
+<div dir="ltr">
 
-הפעל את **“Keep RTL after Claude updates”** והוא יחיל את עצמו מחדש אוטומטית אחרי כל עדכון של Claude.
+```powershell
+git clone https://github.com/liorshaya/claude-desktop-rtl.git
+cd claude-desktop-rtl
+powershell -ExecutionPolicy Bypass -File .\desktop\windows\preflight.ps1   # readiness check (read-only)
+powershell -ExecutionPolicy Bypass -File .\desktop\windows\patch.ps1       # apply RTL in place
+powershell -ExecutionPolicy Bypass -File .\desktop\windows\patch.ps1 -Status
+```
 
-> עובד עם **שתי** ההתקנות: גם ה‑`.exe` הקלאסי מ‑claude.ai וגם גרסת ה‑Microsoft Store (MSIX). בגרסת ה‑Store, החלת RTL מבקשת **אישור מנהל** חד‑פעמי (UAC) — היא חותמת מחדש את Claude עם תעודה מקומית כדי ש‑Cowork ימשיך לעבוד, ו‑**“Restore original” מחזיר הכול לקדמותו**. המקור תמיד מגובה.
+</div>
 
-מעדיף שורת פקודה? צינור ה‑PowerShell מתועד ב‑**[desktop/windows/README.md](../desktop/windows/README.md)**.
+**✔ התוצאה הצפויה:** התג במגש מציג **“RTL is active”**, ו‑`-Status` מדפיס `patched : True  (payload marker in app.asar)`.
 
-### דפדפן — claude.ai (כל מערכת הפעלה)
+### 🏪 Windows — Microsoft Store (MSIX)
 
-עובד ב‑Chrome, Edge, Firefox, Safari — בכל מקום עם מנהל userscript.
+1. אותו מתקין ואותה אפליקציית מגש כמו למעלה — היא **מזהה לבד** התקנה מהחנות.
+2. לחצו **Install RTL** ואשרו את בקשת ה‑**מנהל** החד‑פעמית (UAC). היא חותמת מחדש את Claude עם תעודה מקומית כדי ש‑**Cowork ימשיך לעבוד**; **Restore original** מחזיר הכול לקדמותו.
+3. פתחו את Claude.
+
+**שורת פקודה** (מקבילה — מריצים מ‑PowerShell **מוגבה** (Run as administrator), דורשת Node מ‑checkout של git):
+
+<div dir="ltr">
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\desktop\windows\patch-msix.ps1          # apply (admin)
+powershell -ExecutionPolicy Bypass -File .\desktop\windows\patch-msix.ps1 -Verify  # read-only check
+```
+
+</div>
+
+**✔ התוצאה הצפויה:** ‏`-Verify` מדפיס `RTL injected (asar marker)   : True` ומאשר את שורות התעודה — ו‑Cowork ממשיך לעבוד.
+
+### 🌐 דפדפן — claude.ai (כל מערכת הפעלה)
+
+1. התקינו **Tampermonkey** (או Violentmonkey) והפעילו בתוסף **“Allow User Scripts”** (דרישה של Chrome/Edge).
+2. בנו את ה‑userscript (דורש Node):
+
+<div dir="ltr">
 
 ```bash
-npm run build            # בונה dist/claude-rtl.user.js
+git clone https://github.com/liorshaya/claude-desktop-rtl.git
+cd claude-desktop-rtl
+npm run build            # builds dist/claude-rtl.user.js
 ```
 
-1. התקן **Tampermonkey** (או Violentmonkey).
-2. פתח את `dist/claude-rtl.user.js` והתקן (או הדבק את התוכן בסקריפט חדש).
-3. בתוסף, הפעל **“Allow User Scripts”** (דרישה של Chrome/Edge).
-4. רענן את `claude.ai`.
+</div>
 
-### CLI — מתקדם (macOS)
+3. פתחו את `dist/claude-rtl.user.js` והתקינו אותו (או הדביקו את התוכן בסקריפט חדש ב‑Tampermonkey).
+4. רעננו את `claude.ai`.
 
-```bash
-desktop/patch.sh --install      # patch (בניית עותק + הזרקת RTL)
-desktop/patch.sh --watch        # החלה אוטומטית בעדכוני Claude
-desktop/patch.sh --status       # מצב מקורי / מתוקן / watcher
-desktop/patch.sh --uninstall    # הסרת העותק (המקורי לא נגע)
-```
+**✔ התוצאה הצפויה:** תשובות בעברית ובערבית ב‑claude.ai נקראות מיד מימין לשמאל — כולל בתוך פאנל ה‑Artifacts.
 
-## 🧠 איך זה עובד
+## 🧰 כל השאר
 
-הדפדפן כבר מריץ אלגוריתם Bidi מלא של יוניקוד. אנחנו לא ממשים אותו מחדש — אנחנו עושים את **החלטות הכיוון והבידוד** ונותנים ל‑renderer לסדר. CSS `unicode-bidi: plaintext` לכל leaf block הוא מנגנון‑הבסיס היחיד ל‑prose, כך שכל בלוק מחליט לעצמו והקונטיינר לעולם לא מתהפך. אפליקציית הדסקטוp מזריקה את אותו מנוע ל‑renderer של Claude ומהפכת רק את כיוון חלון‑הכרום ב‑main process.
+<details>
+<summary><b>📋 מה זה מטפל</b> — רשימת המשטחים המלאה</summary>
 
-עיצוב מלא: **[ARCHITECTURE.md](ARCHITECTURE.md)**.
+| משטח | התנהגות |
+|---|---|
+| טקסט רץ (פסקאות, כותרות) | כיוון בסיס לכל בלוק לפי ה‑first-strong של הדפדפן |
+| רשימות (כולל מקוננות) | סימוני הרשימה וההזחה נצמדים לצד התוכן; כיוון חכם לכל פריט |
+| טבלאות | סדר העמודות לפי רוב התוכן; כל עמודה מיושרת לשפה שלה |
+| ציטוטים | הפס וההזחה עוברים לצד התוכן |
+| מספרים, מטבע, %, תאריכים | מסודרים נכון; לעולם לא כופים על שורה עברית LTR |
+| השוואות (`3 < 5`) ומספרים עם סימן (`-5`) | מבודדים כך שהמתמטיקה לעולם לא נקראת הפוך |
+| חצים (`→`) ב‑RTL | מתהפכים ויזואלית — התו עצמו לא משתנה |
+| בלוקי קוד | נשארים **LTR** במכוון (RTL היה משבש תחביר) |
+| תיבות קלט/עריכה | ‏`dir="auto"`, מיידי, בלי ריצוד |
+| מסמך מעורב אנגלית/עברית | כל בלוק מחליט לעצמו — בלי היפוך גלובלי |
 
-## ⚠️ מגבלות (v1)
+</details>
 
-- **בלוקי קוד אמיתיים נשארים LTR** (במכוון — RTL משבר סוגריים, הזחה, אופרטורים).
-- **Artifacts בדסקטוp** מרונדרים ב‑iframe צולב‑origin שה‑payload של הדסקטוp עוד לא נכנס אליו (ה‑userscript בדפדפן כן מכסה אותם).
-- **אין עדיין פונט עברי מוטמע** — macOS ממילא מרנדר עברית עם פונטי מערכת.
-- הרשימה המלאה ב‑**[ARCHITECTURE.md §15](ARCHITECTURE.md)**.
+<details>
+<summary><b>🔁 שמירה על RTL אחרי עדכוני Claude</b> — מנגנון ההחלה‑מחדש האוטומטי</summary>
+
+עדכון של Claude מחליף את הקבצים ומוחק כל patch. הפעילו באפליקציה את **“Keep RTL after Claude updates”** (בשתי מערכות ההפעלה) ו‑RTL יוחל מחדש אוטומטית אחרי כל עדכון — הוא מחכה קודם שהעדכון יסתיים לגמרי, ולעולם לא סוגר בכוח Claude שרץ.
+
+בשורת הפקודה: ‏`desktop/patch.sh --watch` / ‏`--unwatch` ‏(macOS, ‏LaunchAgent ברמת המשתמש), ‏`patch.ps1 -Watch` / ‏`-Unwatch` (התקנת claude.ai, ‏watcher בכניסה למערכת), ‏`patch-msix.ps1 -Watch` / ‏`-Unwatch` (התקנת החנות, משימה מתוזמנת).
+
+</details>
+
+<details>
+<summary><b>🧹 הסרה / שחזור</b> — פקודה אחת, הפיך לגמרי</summary>
+
+- **macOS:** לחצו **Uninstall** באפליקציה, או `desktop/patch.sh --uninstall` — מסיר את `‎~/Applications/Claude-RTL.app`; המקורי מעולם לא שונה.
+- **Windows (התקנת claude.ai):** לחצו **Restore original** באפליקציה, או `patch.ps1 -Restore` — מחזיר את `claude.exe` ו‑`app.asar` מהגיבוי, בייט‑לבייט.
+- **Windows (החנות):** ‏**Restore original**, או `patch-msix.ps1 -Restore` — מסיר גם את התעודה המקומית שנוצרה.
+- **דפדפן:** הסירו את הסקריפט מ‑Tampermonkey.
+
+</details>
+
+<details>
+<summary><b>🛠 פתרון תקלות</b></summary>
+
+- **macOS לא פותח את האפליקציה** (“unidentified developer”): קליק‑ימני → **Open** → **Open**, או System Settings ‏← Privacy & Security ‏← **Open Anyway**. חד‑פעמי; בנייה מהמקור מדלגת על זה.
+- **חלון ראשון לבן** אחרי ההתקנה (macOS): צאו (⌘Q) ופתחו שוב — אפקט חד‑פעמי.
+- **בקשת keychain** ‏(macOS): לחצו **Always Allow** — העותק המתוקן קורא את אותה רשומת keychain מקומית ש‑Claude כבר משתמש בה.
+- **“Open Claude-RTL” סוגר קודם את המקורי** — הם חולקים תיקיית נתונים ולא יכולים לרוץ יחד.
+- **ה‑userscript לא עושה כלום** ‏(Chrome/Edge): הפעילו **“Allow User Scripts”** ל‑Tampermonkey ורעננו את claude.ai.
+- **Windows מודיע שההתקנה בשימוש:** סגרו קודם את Claude, או תנו ל‑watcher להחיל RTL בפעם הבאה ש‑Claude ייסגר.
+
+</details>
+
+<details>
+<summary><b>🧠 איך זה עובד</b> — 30 שניות של פנימיוּת</summary>
+
+הדפדפן כבר מריץ אלגוריתם Bidi מלא של יוניקוד. Claude RTL לא מממש אותו מחדש — הוא מקבל את **החלטות הכיוון והבידוד** ונותן ל‑renderer לסדר. ‏CSS ‏`unicode-bidi: plaintext` לכל בלוק‑עלה הוא מנגנון כיוון‑הבסיס היחיד לטקסט רץ, כך שכל בלוק מחליט לעצמו והמכל לעולם לא מהופך בכוח. אפליקציות הדסקטופ מזריקות את אותו מנוע ל‑bundles של ה‑renderer של Claude, ומהפכות רק את כיוון מסגרת‑החלון ב‑main process.
+
+העיצוב המלא: **[ARCHITECTURE.md](ARCHITECTURE.md)** · צינור ה‑Windows‏: **[WINDOWS.md](WINDOWS.md)**
+
+</details>
+
+<details>
+<summary><b>⚠️ מגבלות (v1)</b></summary>
+
+- **בלוקי קוד אמיתיים נשארים LTR** (במכוון — RTL משבש סוגריים, הזחה ואופרטורים). בלוק שהוא בעצם פרוזה עברית *כן* מזוהה ומרונדר RTL.
+- **Artifacts בדסקטופ** מרונדרים ב‑iframe חוצה‑origin שה‑payload של הדסקטופ עוד לא נכנס אליו (ה‑userscript בדפדפן כן מכסה אותם).
+- **אין עדיין גופן עברי מוטמע** — macOS ממילא מרנדר עברית עם גופני מערכת.
+- הרשימה המלאה: **[ARCHITECTURE.md §15](ARCHITECTURE.md)**.
+
+</details>
 
 ## 🤝 תרומה
 
-PRs יתקבלו בשמחה — זה open source. ראה **[CONTRIBUTING.md](../CONTRIBUTING.md)**, וכש‑Claude משנה את ה‑DOM שלו, ה‑**[runbook לאימוץ גרסת Claude חדשה](RUNBOOK-adopt-new-claude-version.md)** מראה בדיוק איך לעדכן את ה‑selectors.
+PRs יתקבלו בשמחה — המנוע טהור ובדוק; הרף הוא `node --test` ירוק ושינוי קטן וממוקד. התחילו מ‑**[CONTRIBUTING.md](../CONTRIBUTING.md)**; אם Claude משנה את ה‑DOM שלו, ה‑**[runbook לאימוץ גרסת Claude חדשה](RUNBOOK-adopt-new-claude-version.md)** מראה בדיוק איך לעדכן את הסלקטורים.
 
 ## 📄 רישיון
 
-[MIT](../LICENSE) © Lior Shaya
+[MIT](../LICENSE) © ליאור שעיה
 
 </div>
