@@ -222,6 +222,10 @@ npm run build            # builds dist/claude-rtl.user.js
 
 PRs יתקבלו בשמחה — המנוע טהור ובדוק; הרף הוא `node --test` ירוק ושינוי קטן וממוקד. התחילו מ‑**[CONTRIBUTING.md](../CONTRIBUTING.md)**; אם Claude משנה את ה‑DOM שלו, ה‑**[runbook לאימוץ גרסת Claude חדשה](RUNBOOK-adopt-new-claude-version.md)** מראה בדיוק איך לעדכן את הסלקטורים.
 
+## 🔏 חתימת קוד
+
+ארטיפקטי ה‑release של Windows כפופים ל‑**[מדיניות חתימת הקוד](CODE_SIGNING.md)** של הפרויקט (תפקידי צוות, תהליך הבנייה, פרטיות). חתימת הקוד מוקמת בחינם דרך תוכנית ה‑OSS של [SignPath Foundation](https://signpath.org/).
+
 ## 📄 רישיון
 
 [MIT](../LICENSE) © ליאור שעיה

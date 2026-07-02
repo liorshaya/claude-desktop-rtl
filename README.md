@@ -204,6 +204,12 @@ Full design: **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** · Windows pipeline: **
 
 PRs are very welcome — the engine is pure and unit-tested; the bar is a green `node --test` and a small, single-purpose change. Start with **[CONTRIBUTING.md](CONTRIBUTING.md)**; if Claude changes its DOM, the **[adopt-a-new-Claude-version runbook](docs/RUNBOOK-adopt-new-claude-version.md)** shows exactly how to update the selectors.
 
+## 🔏 Code signing
+
+Windows release artifacts are governed by the project's **[Code Signing Policy](docs/CODE_SIGNING.md)**
+(team roles, build process, privacy). Code signing is being set up free of charge through the
+[SignPath Foundation](https://signpath.org/) OSS program.
+
 ## 📄 License
 
 [MIT](LICENSE) © Lior Shaya

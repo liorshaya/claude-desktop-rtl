@@ -222,6 +222,10 @@ npm run build            # builds dist/claude-rtl.user.js
 
 طلبات الدمج (PRs) مُرحّب بها — المحرّك نقي ومُختبَر؛ والمعيار هو `node --test` أخضر وتغيير صغير محدّد الغرض. ابدأ من **[CONTRIBUTING.md](../CONTRIBUTING.md)**؛ وعندما يُغيّر Claude الـDOM خاصته، يوضّح **[دليل اعتماد إصدار Claude جديد](RUNBOOK-adopt-new-claude-version.md)** بالضبط كيفية تحديث المُحدِّدات.
 
+## 🔏 توقيع الشيفرة
+
+تخضع مُخرجات إصدارات Windows لـ**[سياسة توقيع الشيفرة](CODE_SIGNING.md)** الخاصة بالمشروع (أدوار الفريق، عملية البناء، الخصوصية). يجري إعداد توقيع الشيفرة مجانًا عبر برنامج الـOSS لدى [SignPath Foundation](https://signpath.org/).
+
 ## 📄 الترخيص
 
 [MIT](../LICENSE) © Lior Shaya
