@@ -196,7 +196,11 @@ function relationRuns(text) {
   if (!text) return out;
   const len = text.length;
   const ch = (i) => text.charAt(i);
-  const isWS = (c) => c === ' ' || c === '\t';
+  // Chain-growth whitespace includes NBSP (U+00A0), narrow NBSP (U+202F) and thin space
+  // (U+2009) — rendered markdown/KaTeX emit these between operands; without them the chain
+  // broke at the space and only the bare operator isolated (glyph fixed, operands still
+  // reordered in RTL). NOT '\n': a newline ends the expression.
+  const isWS = (c) => c === ' ' || c === '\t' || c === '\u00a0' || c === '\u202f' || c === '\u2009';
 
   // HTML-tag spans whose < > must not act as relations/connectors.
   const tags = [];
