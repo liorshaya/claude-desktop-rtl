@@ -118,7 +118,9 @@ function isScriptChar(ch) {
 // sentence period ("2.") and a list comma ("x, y") never join an operand. The Arabic-script
 // locales use ٫ (U+066B decimal) and ٬ (U+066C thousands) — without them "٥٫٥ < ٦" isolated
 // "٥ < ٦", CUTTING the number in half across the isolation boundary (worse than not isolating).
-function isSep(ch) { return ch === '.' || ch === ',' || ch === '٫' || ch === '٬'; }
+// ':' joins digits for clock times and ratios — "9:00-17:00" used to isolate just "00-17",
+// cutting BOTH ends; a prose colon ("שאלה: 5") has no digit on its left and never joins.
+function isSep(ch) { return ch === '.' || ch === ',' || ch === ':' || ch === '٫' || ch === '٬'; }
 // ARITHMETIC operators: + - − × ÷ = · ∗ ⋅ ± ∓ * / . NOT Bidi_Mirrored (their glyphs are fine in
 // RTL), but they still REORDER weak number operands — "15 + 7 = 22" renders "22 = 7 + 15" in an
 // RTL paragraph because the digits are weak. So an all-number arithmetic run must be isolated LTR
@@ -224,22 +226,24 @@ function relationRuns(text) {
   // and the line scrambles. bracketSpanEnd: from an opener at i → the index past its matching
   // closer, or i if unbalanced. bracketSpanLeft: from a closer at i → its matching opener index,
   // or i+1 if unbalanced. Mixed pairs are allowed for half-open intervals — "[a, b)" matches.
-  function bracketSpanEnd(i) {
-    let depth = 0;
-    for (let j = i; j < len; j++) {
-      if (OPENERS.indexOf(ch(j)) !== -1) depth += 1;
-      else if (CLOSERS.indexOf(ch(j)) !== -1) { depth -= 1; if (depth === 0) return j + 1; }
+  // All pairs are resolved in ONE stack pass up front — the per-call depth scan was O(n) and made
+  // the seed loop QUADRATIC on unmatched openers: 20k stray "(" before a comparison took ~2s
+  // (a renderer freeze); the same depth counting via a stack matches pair-for-pair in O(n).
+  const matchFwd = new Map(); // opener index → index PAST its matching closer
+  const matchBwd = new Map(); // closer index → its matching opener index
+  {
+    const stack = [];
+    for (let j = 0; j < len; j++) {
+      if (OPENERS.indexOf(ch(j)) !== -1) stack.push(j);
+      else if (CLOSERS.indexOf(ch(j)) !== -1 && stack.length) {
+        const o = stack.pop();
+        matchFwd.set(o, j + 1);
+        matchBwd.set(j, o);
+      }
     }
-    return i;
   }
-  function bracketSpanLeft(i) {
-    let depth = 0;
-    for (let j = i; j >= 0; j--) {
-      if (CLOSERS.indexOf(ch(j)) !== -1) depth += 1;
-      else if (OPENERS.indexOf(ch(j)) !== -1) { depth -= 1; if (depth === 0) return j; }
-    }
-    return i + 1;
-  }
+  function bracketSpanEnd(i) { const e = matchFwd.get(i); return e === undefined ? i : e; }
+  function bracketSpanLeft(i) { const o = matchBwd.get(i); return o === undefined ? i + 1 : o; }
   // A STANDALONE "math bracket" group to isolate (no surrounding operator to seed it): a balanced
   // bracket whose content carries a COMMA or a math CONNECTOR/PREFIX — an interval/tuple/finite-set
   // or a grouped expression: "[a, b]", "(0, 1]", "(x, y)", "{1, 2, 3}", "(3 × 5)", "(a + b)". It is
@@ -344,6 +348,14 @@ function relationRuns(text) {
     if (i > 0 && isCurrency(ch(i - 1))) i -= 1; // leading currency: $5, ₪5
     if (i > 0 && isSign(ch(i - 1)) && (isDigitCh(ch(i)) || isCurrency(ch(i)))) {
       if (i - 1 === 0 || !LETTER_OR_NUMBER.test(ch(i - 2))) i -= 1; // sign at a boundary: -5, -$5
+    }
+    // a signed EXPONENT/subscript: in "10^-9" the sign hangs off a ^/_ that binds a base on its
+    // left — rebind through the script char so the operand is the WHOLE power ("10^-9"), not
+    // "-9" with "10^" cut off outside the isolation boundary. (termEndRight already does this
+    // rightward via scriptArgEnd's sign handling.)
+    if (i > 1 && (ch(i - 1) === '^' || ch(i - 1) === '_') && isTermChar(ch(i - 2))) {
+      const base = termStartLeft(i - 1);
+      if (base < i - 1) return base;
     }
     return i;
   }
