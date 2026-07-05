@@ -107,7 +107,7 @@ function isSign(ch) {
 // Currency that can prefix or suffix a number operand ($5, 5₪). isSuffix also covers %/°/!.
 const CURRENCY = '$₪€£¥¢₹₣';
 function isCurrency(ch) { return ch !== '' && CURRENCY.indexOf(ch) !== -1; }
-function isSuffix(ch) { return ch === '%' || ch === '°' || ch === '!' || isCurrency(ch); } // 50% 10° 5₪ n!
+function isSuffix(ch) { return ch === '%' || ch === '٪' || ch === '°' || ch === '!' || isCurrency(ch); } // 50% ٥٠٪ 10° 5₪ n!
 // A precomposed super/subscript glyph: ² ³ ¹ and the super/subscript block — a power/index that
 // can trail a BRACKET group ("(a+b)²", "(1+1/n)ⁿ"), where it is NOT a plain term char of a base.
 function isScriptChar(ch) {
@@ -115,8 +115,10 @@ function isScriptChar(ch) {
   return c === 0xb2 || c === 0xb3 || c === 0xb9 || (c >= 0x2070 && c <= 0x209f);
 }
 // '.'/',' are number-internal separators (3.14, 1,000) — counted ONLY between two digits, so a
-// sentence period ("2.") and a list comma ("x, y") never join an operand.
-function isSep(ch) { return ch === '.' || ch === ','; }
+// sentence period ("2.") and a list comma ("x, y") never join an operand. The Arabic-script
+// locales use ٫ (U+066B decimal) and ٬ (U+066C thousands) — without them "٥٫٥ < ٦" isolated
+// "٥ < ٦", CUTTING the number in half across the isolation boundary (worse than not isolating).
+function isSep(ch) { return ch === '.' || ch === ',' || ch === '٫' || ch === '٬'; }
 // ARITHMETIC operators: + - − × ÷ = · ∗ ⋅ ± ∓ * / . NOT Bidi_Mirrored (their glyphs are fine in
 // RTL), but they still REORDER weak number operands — "15 + 7 = 22" renders "22 = 7 + 15" in an
 // RTL paragraph because the digits are weak. So an all-number arithmetic run must be isolated LTR

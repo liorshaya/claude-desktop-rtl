@@ -39,7 +39,7 @@ function digitScript(str) {
 // Separators include '-' (kept last in the class = literal) so dates/phones/versions like
 // 2024-01-15 or 03-1234567 peel as ONE token, not several.
 const LEADING_NUMBER =
-  /^[$₪€£¥]?[-+±]?[0-9٠-٩۰-۹]+(?:[.,_:/-][0-9٠-٩۰-۹]+)*[%°]?[$₪€£¥]?/;
+  /^[$₪€£¥]?[-+±]?[0-9٠-٩۰-۹]+(?:[.,_:/٫٬-][0-9٠-٩۰-۹]+)*[%٪°]?[$₪€£¥]?/;
 
 function leadingNumber(str) {
   const m = str.match(LEADING_NUMBER);
@@ -55,7 +55,8 @@ function leadingNumber(str) {
 // In RTL the browser detaches a leading sign and renders "-5" as "5-" (wrong); the DOM
 // isolates each run as an LTR unit so the sign stays with its number ("-5"). Returns the
 // UTF-16 [start, end) ranges. PURE; astral-safe (offsets index the input string).
-const SIGNED_NUMBER = /(?<![\p{L}\p{N}])[+\-−][0-9٠-٩۰-۹]+(?:[.,][0-9٠-٩۰-۹]+)*/gu;
+// separators include the Arabic-script ٫ (decimal) / ٬ (thousands) so "-٥٫٥" stays one run
+const SIGNED_NUMBER = /(?<![\p{L}\p{N}])[+\-−][0-9٠-٩۰-۹]+(?:[.,٫٬][0-9٠-٩۰-۹]+)*/gu;
 
 function signedNumberRuns(text) {
   const out = [];
