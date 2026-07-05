@@ -60,8 +60,13 @@ function hasMathRun(str) {
     // makes the precise call (and returns [] for prose), so a loose gate only costs an extra parse.
     if ((op && weak) || (bracket && (comma || op))) return true;
   }
-  return false;
+  // a subscripted limit/extremum name ("lim_{n→∞} aₙ") can be the ONLY signal on its line —
+  // no digit, no operator, no comma — yet relationRuns seeds it via LIMIT_RE. Without this the
+  // gate skipped the parse and the limit never isolated (found by the prefix-fuzz suite).
+  return LIMIT_GATE.test(str);
 }
+// Non-global twin of LIMIT_RE (a bare .test() must not carry /g lastIndex state).
+const LIMIT_GATE = /(?<![A-Za-z])(?:limsup|liminf|argmax|argmin|lim|sup|inf|max|min|det|gcd|lcm)_/;
 
 // `<` and `>` are DUAL-USE: a comparison operator ("3 < 5") AND an HTML-tag delimiter
 // ("<div>"). A comparison must be isolated (so it doesn't read "3 > 5"); a TAG must NOT — its
@@ -102,7 +107,7 @@ function isSign(ch) {
 // Currency that can prefix or suffix a number operand ($5, 5₪). isSuffix also covers %/°/!.
 const CURRENCY = '$₪€£¥¢₹₣';
 function isCurrency(ch) { return ch !== '' && CURRENCY.indexOf(ch) !== -1; }
-function isSuffix(ch) { return ch === '%' || ch === '°' || ch === '!' || isCurrency(ch); } // 50% 10° 5₪ n!
+function isSuffix(ch) { return ch === '%' || ch === '٪' || ch === '°' || ch === '!' || isCurrency(ch); } // 50% ٥٠٪ 10° 5₪ n!
 // A precomposed super/subscript glyph: ² ³ ¹ and the super/subscript block — a power/index that
 // can trail a BRACKET group ("(a+b)²", "(1+1/n)ⁿ"), where it is NOT a plain term char of a base.
 function isScriptChar(ch) {
@@ -110,8 +115,12 @@ function isScriptChar(ch) {
   return c === 0xb2 || c === 0xb3 || c === 0xb9 || (c >= 0x2070 && c <= 0x209f);
 }
 // '.'/',' are number-internal separators (3.14, 1,000) — counted ONLY between two digits, so a
-// sentence period ("2.") and a list comma ("x, y") never join an operand.
-function isSep(ch) { return ch === '.' || ch === ','; }
+// sentence period ("2.") and a list comma ("x, y") never join an operand. The Arabic-script
+// locales use ٫ (U+066B decimal) and ٬ (U+066C thousands) — without them "٥٫٥ < ٦" isolated
+// "٥ < ٦", CUTTING the number in half across the isolation boundary (worse than not isolating).
+// ':' joins digits for clock times and ratios — "9:00-17:00" used to isolate just "00-17",
+// cutting BOTH ends; a prose colon ("שאלה: 5") has no digit on its left and never joins.
+function isSep(ch) { return ch === '.' || ch === ',' || ch === ':' || ch === '٫' || ch === '٬'; }
 // ARITHMETIC operators: + - − × ÷ = · ∗ ⋅ ± ∓ * / . NOT Bidi_Mirrored (their glyphs are fine in
 // RTL), but they still REORDER weak number operands — "15 + 7 = 22" renders "22 = 7 + 15" in an
 // RTL paragraph because the digits are weak. So an all-number arithmetic run must be isolated LTR
@@ -196,7 +205,11 @@ function relationRuns(text) {
   if (!text) return out;
   const len = text.length;
   const ch = (i) => text.charAt(i);
-  const isWS = (c) => c === ' ' || c === '\t';
+  // Chain-growth whitespace includes NBSP (U+00A0), narrow NBSP (U+202F) and thin space
+  // (U+2009) — rendered markdown/KaTeX emit these between operands; without them the chain
+  // broke at the space and only the bare operator isolated (glyph fixed, operands still
+  // reordered in RTL). NOT '\n': a newline ends the expression.
+  const isWS = (c) => c === ' ' || c === '\t' || c === '\u00a0' || c === '\u202f' || c === '\u2009';
 
   // HTML-tag spans whose < > must not act as relations/connectors.
   const tags = [];
@@ -213,22 +226,24 @@ function relationRuns(text) {
   // and the line scrambles. bracketSpanEnd: from an opener at i → the index past its matching
   // closer, or i if unbalanced. bracketSpanLeft: from a closer at i → its matching opener index,
   // or i+1 if unbalanced. Mixed pairs are allowed for half-open intervals — "[a, b)" matches.
-  function bracketSpanEnd(i) {
-    let depth = 0;
-    for (let j = i; j < len; j++) {
-      if (OPENERS.indexOf(ch(j)) !== -1) depth += 1;
-      else if (CLOSERS.indexOf(ch(j)) !== -1) { depth -= 1; if (depth === 0) return j + 1; }
+  // All pairs are resolved in ONE stack pass up front — the per-call depth scan was O(n) and made
+  // the seed loop QUADRATIC on unmatched openers: 20k stray "(" before a comparison took ~2s
+  // (a renderer freeze); the same depth counting via a stack matches pair-for-pair in O(n).
+  const matchFwd = new Map(); // opener index → index PAST its matching closer
+  const matchBwd = new Map(); // closer index → its matching opener index
+  {
+    const stack = [];
+    for (let j = 0; j < len; j++) {
+      if (OPENERS.indexOf(ch(j)) !== -1) stack.push(j);
+      else if (CLOSERS.indexOf(ch(j)) !== -1 && stack.length) {
+        const o = stack.pop();
+        matchFwd.set(o, j + 1);
+        matchBwd.set(j, o);
+      }
     }
-    return i;
   }
-  function bracketSpanLeft(i) {
-    let depth = 0;
-    for (let j = i; j >= 0; j--) {
-      if (CLOSERS.indexOf(ch(j)) !== -1) depth += 1;
-      else if (OPENERS.indexOf(ch(j)) !== -1) { depth -= 1; if (depth === 0) return j; }
-    }
-    return i + 1;
-  }
+  function bracketSpanEnd(i) { const e = matchFwd.get(i); return e === undefined ? i : e; }
+  function bracketSpanLeft(i) { const o = matchBwd.get(i); return o === undefined ? i + 1 : o; }
   // A STANDALONE "math bracket" group to isolate (no surrounding operator to seed it): a balanced
   // bracket whose content carries a COMMA or a math CONNECTOR/PREFIX — an interval/tuple/finite-set
   // or a grouped expression: "[a, b]", "(0, 1]", "(x, y)", "{1, 2, 3}", "(3 × 5)", "(a + b)". It is
@@ -301,7 +316,9 @@ function relationRuns(text) {
     // a bracket group / function-call args ending here is ONE operand: "(3 × 5)", "[a, b]", "f(x)"
     if (i > 0 && CLOSERS.indexOf(ch(i - 1)) !== -1) {
       const open = bracketSpanLeft(i - 1);
-      if (open < i - 1) {
+      // NEVER attach a bracket group holding Hebrew/Arabic prose ("(שתי מילים)") — LTR-isolating
+      // it would reverse the words (§3.2 hard rule). Same guard as mathBracketEnd/absSpans.
+      if (open < i - 1 && !STRONG_RTL_RE.test(text.slice(open + 1, i - 1))) {
         let s = open;
         // a leading function-call name (f(x), sin(θ)) OR a script base (x^{2}, a_{ij})
         for (;;) {
@@ -331,6 +348,14 @@ function relationRuns(text) {
     if (i > 0 && isCurrency(ch(i - 1))) i -= 1; // leading currency: $5, ₪5
     if (i > 0 && isSign(ch(i - 1)) && (isDigitCh(ch(i)) || isCurrency(ch(i)))) {
       if (i - 1 === 0 || !LETTER_OR_NUMBER.test(ch(i - 2))) i -= 1; // sign at a boundary: -5, -$5
+    }
+    // a signed EXPONENT/subscript: in "10^-9" the sign hangs off a ^/_ that binds a base on its
+    // left — rebind through the script char so the operand is the WHOLE power ("10^-9"), not
+    // "-9" with "10^" cut off outside the isolation boundary. (termEndRight already does this
+    // rightward via scriptArgEnd's sign handling.)
+    if (i > 1 && (ch(i - 1) === '^' || ch(i - 1) === '_') && isTermChar(ch(i - 2))) {
+      const base = termStartLeft(i - 1);
+      if (base < i - 1) return base;
     }
     return i;
   }
@@ -368,7 +393,8 @@ function relationRuns(text) {
     if (OPENERS.indexOf(ch(i)) !== -1) {
       const open = i;
       const close = bracketSpanEnd(i);
-      if (close > i) {
+      // same hard-rule guard: a group holding Hebrew/Arabic prose is not an operand
+      if (close > i && !STRONG_RTL_RE.test(text.slice(open + 1, close - 1))) {
         i = close;
         while (i < len && isSuffix(ch(i))) i += 1;
         i = mathBracketPowerEnd(open, close, i);
@@ -395,7 +421,8 @@ function relationRuns(text) {
     if (OPENERS.indexOf(ch(i)) !== -1) {
       const open = i;
       const close = bracketSpanEnd(i);
-      if (close > i) {
+      // same hard-rule guard: a group holding Hebrew/Arabic prose is not an operand
+      if (close > i && !STRONG_RTL_RE.test(text.slice(open + 1, close - 1))) {
         i = close;
         while (i < len && isSuffix(ch(i))) i += 1; // trailing suffix(es): %, °, currency
         i = mathBracketPowerEnd(open, close, i);
@@ -502,7 +529,9 @@ function relationRuns(text) {
       const c = text[i];
       const sign = (c === '+' || c === '-' || c === '−')
         && (i === 0 || !LETTER_OR_NUMBER.test(text[i - 1])) && DIGITS.test(text[i + w] || '');
-      if (!sign) {
+      // …and never seed INSIDE an HTML tag ("<img width=100>") — the whole tag is left to UBA
+      // exactly like its < > brackets (isolating "width=100" fragments the tag run).
+      if (!sign && !inTag(i)) {
         const s = expandLeft(i);
         const e = expandRight(i + w);
         const slice = text.slice(s, e);

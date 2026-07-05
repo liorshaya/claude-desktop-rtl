@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Claude RTL
 // @namespace    https://github.com/liorshaya/claude-desktop-rtl
-// @version      0.2.16
+// @version      0.2.17
 // @description  Smooth RTL (Hebrew/Arabic/Persian) for claude.ai — same pure engine as the desktop patch.
 // @author       Lior Shaya
 // @match        https://*.claude.ai/*
