@@ -60,8 +60,13 @@ function hasMathRun(str) {
     // makes the precise call (and returns [] for prose), so a loose gate only costs an extra parse.
     if ((op && weak) || (bracket && (comma || op))) return true;
   }
-  return false;
+  // a subscripted limit/extremum name ("lim_{n→∞} aₙ") can be the ONLY signal on its line —
+  // no digit, no operator, no comma — yet relationRuns seeds it via LIMIT_RE. Without this the
+  // gate skipped the parse and the limit never isolated (found by the prefix-fuzz suite).
+  return LIMIT_GATE.test(str);
 }
+// Non-global twin of LIMIT_RE (a bare .test() must not carry /g lastIndex state).
+const LIMIT_GATE = /(?<![A-Za-z])(?:limsup|liminf|argmax|argmin|lim|sup|inf|max|min|det|gcd|lcm)_/;
 
 // `<` and `>` are DUAL-USE: a comparison operator ("3 < 5") AND an HTML-tag delimiter
 // ("<div>"). A comparison must be isolated (so it doesn't read "3 > 5"); a TAG must NOT — its
@@ -305,7 +310,9 @@ function relationRuns(text) {
     // a bracket group / function-call args ending here is ONE operand: "(3 × 5)", "[a, b]", "f(x)"
     if (i > 0 && CLOSERS.indexOf(ch(i - 1)) !== -1) {
       const open = bracketSpanLeft(i - 1);
-      if (open < i - 1) {
+      // NEVER attach a bracket group holding Hebrew/Arabic prose ("(שתי מילים)") — LTR-isolating
+      // it would reverse the words (§3.2 hard rule). Same guard as mathBracketEnd/absSpans.
+      if (open < i - 1 && !STRONG_RTL_RE.test(text.slice(open + 1, i - 1))) {
         let s = open;
         // a leading function-call name (f(x), sin(θ)) OR a script base (x^{2}, a_{ij})
         for (;;) {
@@ -372,7 +379,8 @@ function relationRuns(text) {
     if (OPENERS.indexOf(ch(i)) !== -1) {
       const open = i;
       const close = bracketSpanEnd(i);
-      if (close > i) {
+      // same hard-rule guard: a group holding Hebrew/Arabic prose is not an operand
+      if (close > i && !STRONG_RTL_RE.test(text.slice(open + 1, close - 1))) {
         i = close;
         while (i < len && isSuffix(ch(i))) i += 1;
         i = mathBracketPowerEnd(open, close, i);
@@ -399,7 +407,8 @@ function relationRuns(text) {
     if (OPENERS.indexOf(ch(i)) !== -1) {
       const open = i;
       const close = bracketSpanEnd(i);
-      if (close > i) {
+      // same hard-rule guard: a group holding Hebrew/Arabic prose is not an operand
+      if (close > i && !STRONG_RTL_RE.test(text.slice(open + 1, close - 1))) {
         i = close;
         while (i < len && isSuffix(ch(i))) i += 1; // trailing suffix(es): %, °, currency
         i = mathBracketPowerEnd(open, close, i);
@@ -506,7 +515,9 @@ function relationRuns(text) {
       const c = text[i];
       const sign = (c === '+' || c === '-' || c === '−')
         && (i === 0 || !LETTER_OR_NUMBER.test(text[i - 1])) && DIGITS.test(text[i + w] || '');
-      if (!sign) {
+      // …and never seed INSIDE an HTML tag ("<img width=100>") — the whole tag is left to UBA
+      // exactly like its < > brackets (isolating "width=100" fragments the tag run).
+      if (!sign && !inTag(i)) {
         const s = expandLeft(i);
         const e = expandRight(i + w);
         const slice = text.slice(s, e);
