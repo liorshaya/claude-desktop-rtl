@@ -59,10 +59,12 @@ test('exotic: dense chains with no whitespace at all', () => {
 });
 
 // ─────────────────── raw math delimiters are NOT the engine's problem ───────────────────
-test('exotic: KNOWN — relationRuns is math-delimiter-agnostic (the DOM segments math FIRST)', () => {
-  // Raw "$x<y$" only reaches the relation pass mid-stream before KaTeX renders; the DOM runs
-  // segmentMath before relations, so the engine's view here is locked, not "fixed": the $-pair
-  // reads as currency prefix/suffix of the operands.
+test('exotic: KNOWN — relationRuns is math-delimiter-agnostic (rendered math never reaches it)', () => {
+  // Raw "$x<y$" reaches the relation pass only mid-stream, before KaTeX renders: the DOM's
+  // walker skips RENDERED math islands (inLtrIsland), not raw delimiters. Wrapping the raw text
+  // is harmless — the isolate reads the formula LTR anyway, and the next React render replaces
+  // the node wholesale. Locked as the engine's view, not "fixed": the $-pair reads as currency
+  // prefix/suffix of the operands.
   assert.deepEqual(runs('$x<y$ וגם 3 < 5'), ['$x<y$', '3 < 5']);
   assert.deepEqual(runs('\\(a<b\\) בסדר'), ['(a<b\\)']);         // \( \) brackets seed as a math group
 });
