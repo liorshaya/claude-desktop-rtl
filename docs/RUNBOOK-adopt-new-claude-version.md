@@ -22,7 +22,7 @@ In the **browser** (claude.ai), open DevTools → Console (context **top**):
 ({
   running: document.documentElement.getAttribute('data-claude-rtl'),  // "1" = yes
   styleOrSheet: !!document.getElementById('claude-rtl-style') || document.adoptedStyleSheets.length > 0,
-  messageRoots: document.querySelectorAll('.standard-markdown, .font-claude-response, [data-testid="user-message"]').length
+  messageRoots: document.querySelectorAll('.standard-markdown, .progressive-markdown, .font-claude-response, [data-testid="user-message"]').length
 })
 ```
 
@@ -52,8 +52,10 @@ Right-click a Hebrew line in a Claude reply → **Inspect**, then in the Console
 Read the chain top-down and find:
 - the **leaf block** (`p`/`li`/`td`/…) the Hebrew text lives in → its class goes into the
   per-leaf rules if needed;
-- a **stable container** above it (today: `.standard-markdown` / `.font-claude-response` for
-  the assistant, `[data-testid="user-message"]` for you) → that's `SELECTORS.messageRoot`.
+- a **stable container** above it (today: `.standard-markdown` for the settled assistant
+  message, `.progressive-markdown` for the SAME root **while it streams** — claude.ai swaps
+  the class in place at stream end — `.font-claude-response` as fallback,
+  `[data-testid="user-message"]` for you) → that's `SELECTORS.messageRoot`.
 
 Update [`dom/surfaces.js`](../dom/surfaces.js) `SELECTORS` (`messageRoot`, `leafBlock`,
 `dirBlock`, `composer`, `editBox`, `table`) and, if a rule's anchor class changed, the

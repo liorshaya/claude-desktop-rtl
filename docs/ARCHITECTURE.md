@@ -319,7 +319,7 @@ Thin. Responsibilities only where CSS can't decide:
 |---|---|---|
 | Chat composer | contenteditable | `dir="auto"` + re-assert |
 | **Edit-message box** | textarea/CE | `dir="auto"` (commonly forgotten) |
-| Streamed responses | markdown→DOM, incremental | CSS + scoped observer + settle |
+| Streamed responses | markdown→DOM, incremental; root class is `.progressive-markdown` WHILE streaming, swapped in place to `.standard-markdown` at stream end | CSS + scoped observer + settle; both classes anchored; observer watches the class swap (attributeFilter: class, message roots only) |
 | Code blocks / inline code | `pre`/`.code-block__code`/`code` | force LTR + isolate |
 | **Math** | KaTeX/MathJax/MathML | currency-guard + isolate LTR |
 | Lists (nested) | `ul/ol/li` | per-`li` dir; flip padding side; nesting |
