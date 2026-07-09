@@ -13,8 +13,11 @@ the single source of truth.** Section refs (§) point to it.
   markers, `<blockquote>` bar) via `resolvedDir` (the side the content actually renders to —
   NOT `detectBlockDir`, which over-strips English openers and mis-places the bar), and — the
   one heading/paragraph case — when CSS `plaintext` provably misfires on a Latin/marker
-  opener of a majority-RTL block (`plaintextOverrideDir`: first-strong LTR **and** majority
-  RTL → `dir="rtl"`; majority-English stays put, so §8.K holds). (§3.2, §8.K)
+  opener of a majority-RTL block, evaluated **per `<br>` segment** (a `<br>` is a forced
+  break, so plaintext decides each segment separately — the `**heading**<br>body` case):
+  `plaintextOverrideDirSegments` — ≥1 segment first-strong LTR **and** majority RTL, and no
+  genuinely-LTR segment (that vetoes) → `dir="rtl"`; majority-English stays put, so §8.K
+  holds. (§3.2, §8.K)
 - Direction-detection fallback is `null`, never a forced `'rtl'`. (§3.2)
 - NEVER inject U+200E/200F or any bidi control char — copy/paste & Ctrl-F must return
   Claude's text byte-for-byte. (§3.6, §8.J)

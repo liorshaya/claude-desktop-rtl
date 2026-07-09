@@ -564,11 +564,14 @@ function processDirBlock(el) {
   if (el.closest('pre, code')) return false; // inside a source/code view → stays LTR
   const seen = el.getAttribute(SEEN_ATTR);
   if (!seen && el.getAttribute('dir')) return false; // an explicit dir we didn't set → respect it
-  const t = proseText(el);
+  const segs = proseSegments(el);
+  const t = segs.join('');
   const fp = contentFp(t);
   if (seen === fp) return false; // settled content → decision stands (§3.3)
   el.setAttribute(SEEN_ATTR, fp);
-  if (plaintextOverrideDir(t) === 'rtl' && el.matches && el.matches('li, blockquote')) {
+  // Same per-<br>-segment decision as processProseDir (§3.2/§8.K): a li/blockquote whose
+  // Latin-opener segment misfires under plaintext gets the full content flip.
+  if (plaintextOverrideDirSegments(segs) === 'rtl' && el.matches && el.matches('li, blockquote')) {
     applyRtlOverride(el); // content + bar both RTL
     return true;
   }
@@ -577,26 +580,34 @@ function processDirBlock(el) {
   return true;
 }
 
-// Prose text of a block for direction detection — EXCLUDES isolated math/code islands,
-// mirroring what CSS `plaintext` actually sees (an isolated inline is a neutral object to
-// the parent's bidi, so it never votes on base direction). KaTeX is the motivating case:
-// its HIDDEN MathML <annotation> carries the LaTeX source (`\le`, `\subseteq`, `\in` …),
-// which `textContent` would otherwise count as Latin and wrongly tip a Hebrew explanation's
-// majority to LTR — so the override never fired on "KaTeX: …" lines. Falls back to plain
-// textContent when there are no islands (or no DOM API, e.g. unit tests).
-function proseText(el) {
-  if (!el) return '';
+// Prose text of a block, split into FORCED-BREAK SEGMENTS (§3.2/§8.K). A <br> starts a new
+// bidi paragraph (UAX#9 P1), and CSS `plaintext` resolves base direction per bidi paragraph —
+// so direction decisions must see the segments, not just the concatenation (the live bug:
+// "<strong>מסלול 1: …</strong><br>Azure נותן ב-tier…" — Hebrew-first heading segment RTL,
+// Latin-opener body segment LTR, and the whole-block first-strong hid the misfire).
+// EXCLUDES isolated math/code islands, mirroring what plaintext actually sees (an isolated
+// inline is a neutral object to the parent's bidi, so it never votes on base direction).
+// KaTeX is the motivating case: its HIDDEN MathML <annotation> carries the LaTeX source
+// (`\le`, `\subseteq`, `\in` …), which `textContent` would otherwise count as Latin and
+// wrongly tip a Hebrew explanation's majority to LTR. Falls back to plain textContent when
+// there are no islands/breaks (or no DOM API, e.g. unit tests).
+function proseSegments(el) {
+  if (!el) return [''];
   // <style>/<script> hold CSS/JS, not display text — exclude them like math/code islands so a
   // widget's <style> keyframes never vote on its base direction (the no-aria-label fallback).
   const ISLAND = SELECTORS.math + ', ' + SELECTORS.code + ', style, script';
-  let raw;
+  let parts;
   if (!el.querySelector || typeof document === 'undefined' || !document.createTreeWalker
-      || !el.querySelector(ISLAND)) {
-    raw = el.textContent || '';
+      || !(el.querySelector(ISLAND) || el.querySelector('br'))) {
+    parts = [el.textContent || ''];
   } else {
-    raw = '';
-    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, {
+    parts = [''];
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, {
       acceptNode: (n) => {
+        if (n.nodeType === 1) {
+          // Accept only <br> (a segment boundary); SKIP other elements but still walk into them.
+          return n.tagName === 'BR' ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
+        }
         const p = n.parentElement;
         if (!p || !p.closest) return NodeFilter.FILTER_ACCEPT;
         const island = p.closest(ISLAND);
@@ -607,12 +618,22 @@ function proseText(el) {
       },
     });
     let n;
-    while ((n = walker.nextNode())) raw += n.nodeValue;
+    while ((n = walker.nextNode())) {
+      if (n.nodeType === 1) parts.push(''); // <br> → the next forced-break segment begins
+      else parts[parts.length - 1] += n.nodeValue;
+    }
   }
-  // Also drop RAW (not-yet-rendered) math runs — segmentMath keeps currency ($5), strips
-  // real LaTeX ($x \le y$). Guards the window before KaTeX renders, when the LaTeX source
-  // would still be live text and could pollute the majority just like the MathML annotation.
-  return segmentMath(raw).filter((s) => s.type === 'text').map((s) => s.value).join('');
+  // Also drop RAW (not-yet-rendered) math runs from each segment — segmentMath keeps currency
+  // ($5), strips real LaTeX ($x \le y$). Guards the window before KaTeX renders, when the
+  // LaTeX source would still be live text and could pollute the majority just like the
+  // MathML annotation.
+  return parts.map((s) => segmentMath(s).filter((x) => x.type === 'text').map((x) => x.value).join(''));
+}
+
+// The block's prose text as one string — the segments joined (a <br> contributes no text,
+// exactly as textContent sees it). Fingerprints and whole-block decisions key off this.
+function proseText(el) {
+  return proseSegments(el).join('');
 }
 
 // Force a prose block to render RTL (§3.2/§8.K) — content AND any direction-dependent
@@ -656,11 +677,15 @@ function processProseDir(el) {
   if (el.closest('table')) return false; // table cells get §8.K via overrideCellDirs (no text-align)
   const seen = el.getAttribute(SEEN_ATTR);
   if (!seen && el.getAttribute('dir')) return false; // respect an explicit dir we didn't set
-  const t = proseText(el);
+  const segs = proseSegments(el);
+  const t = segs.join('');
   const fp = contentFp(t);
   if (seen === fp) return false; // settled content → decision stands (§3.3)
   el.setAttribute(SEEN_ATTR, fp);
-  if (plaintextOverrideDir(t) === 'rtl') applyRtlOverride(el);
+  // Per-<br>-segment decision (§3.2/§8.K): plaintext resolves each forced-break segment on
+  // its own, so a "**heading**<br>Azure …" block misfires only in its SECOND bidi paragraph
+  // — invisible to a whole-text first-strong. One genuinely-LTR segment vetoes (§8.K).
+  if (plaintextOverrideDirSegments(segs) === 'rtl') applyRtlOverride(el);
   // An override applied to a half-streamed prefix ("React הוא …") must be UNDONE when the
   // block ends up majority-English — §8.K: English is never left flipped.
   else if (el.getAttribute('data-rtl-dir')) clearRtlOverride(el);

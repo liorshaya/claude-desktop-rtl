@@ -152,6 +152,34 @@ function plaintextOverrideDir(text) {
   return majority(text) === 'rtl' ? 'rtl' : null; // Latin opener but Hebrew-majority → RTL
 }
 
+// Per-FORCED-BREAK-segment override (§3.2/§8.K). CSS `plaintext` resolves base direction
+// per BIDI PARAGRAPH — a <br> is a forced break (UAX#9 P1) — so a block like
+// "<strong>מסלול 1: …</strong><br>Azure נותן ב-tier …" renders its Hebrew-first heading
+// segment RTL and its Latin-opener majority-Hebrew body segment LTR (the live claude.ai
+// "**heading**\n body" pattern). Whole-block plaintextOverrideDir can't see that: the
+// block's first strong char is the heading's Hebrew, so it returns null.
+// This takes the segments (the DOM layer splits at <br>) and decides:
+//   MISFIRE  = firstStrong ltr + majority rtl → plaintext will render this segment wrong
+//   LTR-REAL = firstStrong ltr + majority not-rtl → genuinely LTR content
+//   otherwise (rtl-first / no strong) the segment is fine either way.
+// Return 'rtl' iff ≥1 MISFIRE and 0 LTR-REAL: forcing the whole element RTL is then safe
+// for every segment. A single LTR-REAL segment VETOES — English is never flipped (§8.K),
+// even next to a misfiring sibling. dir/direction can only be set per ELEMENT, so a
+// mixed-verdict block is left to plaintext (fixing only its misfiring segment would need
+// injected wrappers; not worth it until the corpus shows a real case).
+function plaintextOverrideDirSegments(segments) {
+  if (!segments) return null;
+  let misfire = false;
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i];
+    if (!seg) continue;
+    if (firstStrong(seg) !== 'ltr') continue; // rtl-first or neutral → fine either way
+    if (majority(seg) === 'rtl') misfire = true; // plaintext gets this segment wrong
+    else return null; // genuinely-LTR segment → veto (§8.K)
+  }
+  return misfire ? 'rtl' : null;
+}
+
 // The direction a leaf block ACTUALLY renders as: what CSS `plaintext` resolves (UBA first-
 // strong), unless `plaintextOverrideDir` kicks in (a Latin/marker opener of a majority-RTL
 // block). 'rtl' | 'ltr' | null (neutral). Use this — NOT `detectBlockDir` — to place a
@@ -164,5 +192,5 @@ function resolvedDir(text) {
 }
 
 // __EXPORTS__ (everything below is stripped when inlined into the browser payload)
-const api = { firstStrong, majority, stripLeadingNoise, detectBlockDir, cellDir, tableDir, columnDirs, plaintextOverrideDir, resolvedDir };
+const api = { firstStrong, majority, stripLeadingNoise, detectBlockDir, cellDir, tableDir, columnDirs, plaintextOverrideDir, plaintextOverrideDirSegments, resolvedDir };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;

@@ -195,6 +195,13 @@ which matches the actual `plaintext` render. `detectBlockDir` stays a pure engin
   **majority** test is the safe discriminator: an English sentence with embedded Hebrew (`The
   term שלום means peace`) is majority-LTR → `null`, so English is never flipped (§8.K). Pure-
   digit markers (`3.2.1 …`) need no help — UBA skips digits, so first-strong is already RTL.
+  **Per-`<br>`-segment** (`plaintextOverrideDirSegments` + `proseSegments`): a `<br>` is a
+  forced break (UAX#9 P1), so plaintext resolves each segment's base direction on its own —
+  claude.ai's `**heading**\nbody` pattern renders as `<strong>…</strong><br>body` in ONE
+  `<p>`, where a Hebrew-first heading hid a Latin-opener majority-RTL body from the whole-
+  block first-strong (the "Azure נותן ב-tier" live bug). The block is overridden iff ≥1
+  segment misfires and NO segment is genuinely LTR (first-strong LTR + majority not-RTL
+  **vetoes** — English is never flipped even next to a misfiring sibling segment).
   *(Lior-approved relaxation of "never set `dir` on prose"; cf. the matching CLAUDE.md rule.)*
 
 ### 3.3 Streaming-settle (anti-flicker) — *beyond existing tools*
