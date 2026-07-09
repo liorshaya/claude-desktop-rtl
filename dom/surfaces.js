@@ -9,9 +9,12 @@
 // pass if a surface is missed.
 const SELECTORS = {
   // Streamed-response roots: where prose blocks live (claude.ai, verified DOM). We attach
-  // the observer per-root. `.prose` kept as a fallback for other Claude surfaces/versions.
+  // the observer per-root. `.progressive-markdown` is the SAME root WHILE IT STREAMS —
+  // claude.ai renders `className: isStreaming ? "progressive-markdown" : "standard-markdown"`
+  // and swaps the class in place at stream end (an attribute-only mutation; the observer
+  // watches class for exactly that swap). `.prose` kept as a fallback for other surfaces.
   messageRoot:
-    '.standard-markdown, .font-claude-response, .font-claude-message, [data-testid="user-message"], .prose',
+    '.standard-markdown, .progressive-markdown, .font-claude-response, .font-claude-message, [data-testid="user-message"], .prose',
   // The chat input (ProseMirror contenteditable) and the message-EDIT box. Editing reuses
   // a contenteditable, so the composer selector covers it; textarea kept for safety.
   composer: '[contenteditable="true"], div.ProseMirror[contenteditable]',

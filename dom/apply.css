@@ -6,7 +6,11 @@
  * global flip. `plaintext` drives BOTH glyph order and `text-align: start` per block.
  *
  * Root anchors are claude.ai's real message containers (the legacy `.prose` is gone):
- *   .standard-markdown / .font-claude-response  → assistant message markdown
+ *   .standard-markdown / .font-claude-response  → assistant message markdown (settled)
+ *   .progressive-markdown                       → the SAME assistant root WHILE STREAMING
+ *                                                 (className: isStreaming ? progressive : standard;
+ *                                                 without it a streaming Hebrew message gets NO
+ *                                                 plaintext at all and renders base-LTR)
  *   [data-testid="user-message"]                → user message
  * `.prose` / `.font-claude-message` are kept as forward/back-compat fallbacks.
  *
@@ -15,14 +19,14 @@
  * fights us on (unicode-bidi, text-align) — the narrowest reliable override per §4. The
  * `:where()` root keeps specificity contributed by the container at 0. */
 
-:where(.prose, .standard-markdown, .font-claude-response, .font-claude-message, [data-testid="user-message"])
+:where(.prose, .standard-markdown, .progressive-markdown, .font-claude-response, .font-claude-message, [data-testid="user-message"])
   :is(p, li, h1, h2, h3, h4, h5, h6, blockquote, dt, dd, figcaption, caption, td, th) {
   unicode-bidi: plaintext !important;
   text-align: start !important;
 }
 
 /* Long unbreakable LTR tokens (URLs) inside RTL must not blow out the bubble. */
-:where(.prose, .standard-markdown, .font-claude-response, .font-claude-message, [data-testid="user-message"])
+:where(.prose, .standard-markdown, .progressive-markdown, .font-claude-response, .font-claude-message, [data-testid="user-message"])
   :is(p, li) {
   overflow-wrap: anywhere;
 }
@@ -125,16 +129,16 @@ table[dir="rtl"] { direction: rtl; }
  * LAYER 2b — per-COLUMN alignment: JS stamps each cell with its column's majority
  *   direction (data-rtl-col); the column hugs that edge — Hebrew columns right,
  *   English/number columns left — for CLEAN columns regardless of column order. */
-:where(.prose, .standard-markdown, .font-claude-response, .font-claude-message, [data-testid="user-message"], [data-rtl-artifact])
+:where(.prose, .standard-markdown, .progressive-markdown, .font-claude-response, .font-claude-message, [data-testid="user-message"], [data-rtl-artifact])
   :is(td, th) {
   unicode-bidi: plaintext !important;
   text-align: start !important; /* provisional until JS stamps the per-column edge */
 }
-:where(.prose, .standard-markdown, .font-claude-response, .font-claude-message, [data-testid="user-message"], [data-rtl-artifact])
+:where(.prose, .standard-markdown, .progressive-markdown, .font-claude-response, .font-claude-message, [data-testid="user-message"], [data-rtl-artifact])
   :is(td, th)[data-rtl-col="rtl"] {
   text-align: right !important;
 }
-:where(.prose, .standard-markdown, .font-claude-response, .font-claude-message, [data-testid="user-message"], [data-rtl-artifact])
+:where(.prose, .standard-markdown, .progressive-markdown, .font-claude-response, .font-claude-message, [data-testid="user-message"], [data-rtl-artifact])
   :is(td, th)[data-rtl-col="ltr"] {
   text-align: left !important;
 }
@@ -156,7 +160,7 @@ blockquote[dir="rtl"] {
  * (pl-8 = 2rem) which dir="rtl" can't flip, so deeper RTL levels don't step inward from
  * the right. Move that indent to the right. Only nested RTL lists; top-level + LTR keep
  * Claude's spacing. */
-:where(.prose, .standard-markdown, .font-claude-response, .font-claude-message, [data-testid="user-message"], [data-rtl-artifact])
+:where(.prose, .standard-markdown, .progressive-markdown, .font-claude-response, .font-claude-message, [data-testid="user-message"], [data-rtl-artifact])
   :is(ul, ol) :is(ul, ol)[dir="rtl"] {
   padding-left: 0 !important;
   padding-right: 2rem !important;
