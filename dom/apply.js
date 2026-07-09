@@ -280,8 +280,8 @@ function processAskWidget(widget) {
 //     (and points the nav chevrons inward). We isolate its whole cluster LTR via data-rtl-ltr —
 //     content-derived (an LTR run with a digit, outside the option list), so no Tailwind-class
 //     dependency. A Hebrew counter ("1 מתוך 3") is already RTL-correct, so resolvedDir skips it.
-// Loop-safe: the observer watches childList/characterData only (never attributes), so these
-// stamps never feed it back.
+// Loop-safe: the observer's attributeFilter is ['class'] only (for the message-root
+// progressive→standard swap), so these data-* stamps never feed it back.
 function styleAskAffordances(widget, rtl) {
   // (1) Per-option "→": collect the decorative single-arrow spans that SHOULD mirror in RTL.
   const toMirror = [];
@@ -739,7 +739,19 @@ function makeObserver(doc) {
 
   const observer = new MutationObserver((mutations) => {
     const widgets = new Set(); // ask-widgets touched this batch — re-asserted SYNCHRONOUSLY below
+    let work = false; // did any record survive the attribute gate? (else schedule nothing)
     for (const m of mutations) {
+      // Class mutations matter for exactly ONE thing: claude.ai streams a message under
+      // class "progressive-markdown" and swaps the SAME div to "standard-markdown" when the
+      // stream ends — an attribute-only change childList/characterData never see, which
+      // left the settled message unprocessed. React's hover/animation class churn anywhere
+      // else is noise: drop it BEFORE any work, or idle UI would debounce-starve/spam the
+      // heavy pass. Loop-safe: we never write class (the attributeFilter excludes dir,
+      // style and every data-rtl-* stamp), so our own writes can't re-enter here.
+      if (m.type === 'attributes' && !(m.target.matches && m.target.matches(SELECTORS.messageRoot))) {
+        continue;
+      }
+      work = true;
       // Inputs are handled SYNCHRONOUSLY (no debounce) so a freshly-opened edit box is
       // dir="auto" before its first paint — the table/island pass stays deferred.
       for (let i = 0; i < m.addedNodes.length; i++) processAdded(m.addedNodes[i]);
@@ -757,10 +769,19 @@ function makeObserver(doc) {
       pending.add(root);
     }
     for (const w of widgets) processAskWidget(w);
-    schedule();
+    if (work) schedule();
   });
 
-  observer.observe(doc.body, { childList: true, subtree: true, characterData: true });
+  // attributes/attributeFilter: ONLY the class swap on a message root (progressive→standard,
+  // see the gate above). dir / style / data-rtl-* are deliberately outside the filter so the
+  // stamps and overrides we write never re-trigger the observer.
+  observer.observe(doc.body, {
+    childList: true,
+    subtree: true,
+    characterData: true,
+    attributes: true,
+    attributeFilter: ['class'],
+  });
   return observer;
 }
 

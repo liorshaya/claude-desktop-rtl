@@ -145,8 +145,12 @@ const documentMock = {
 };
 
 // Load the real engine+dom source into one scope (as the build does), minus the auto-init,
-// and return the internal functions the suites assert on.
-function loadInternals() {
+// and return the internal functions the suites assert on. `opts.MutationObserver` injects a
+// fake observer class so makeObserver's wiring (options + mutation routing) is testable —
+// omitted, the global stays undefined exactly as before (makeObserver is only reached via
+// the stripped init(), so nothing dereferences it).
+function loadInternals(opts) {
+  opts = opts || {};
   const parts = SOURCES.map((rel) => {
     let src = stripModule(fs.readFileSync(path.join(ROOT, rel), 'utf8'));
     if (rel === 'dom/apply.js') src = src.replace(/\ntry \{\s*\n\s*init\(\);[\s\S]*$/m, '\n');
@@ -157,10 +161,10 @@ function loadInternals() {
     parts.join('\n\n') +
     '\n;return { processRoot, processAdded, processAskWidget, wrapSignedNumbersInBlock,' +
     ' wrapArrowsInBlock, wrapRelationsUnder, processProseDir, processDirBlock, processTable,' +
-    ' processCodeBlock, setInputDir, inEditable, inNoInject, SELECTORS };';
+    ' processCodeBlock, setInputDir, inEditable, inNoInject, makeObserver, SELECTORS };';
   // eslint-disable-next-line no-new-func
-  const factory = new Function('document', 'window', 'NodeFilter', 'GM_addStyle', body);
-  return factory(documentMock, {}, NodeFilter, undefined);
+  const factory = new Function('document', 'window', 'NodeFilter', 'GM_addStyle', 'MutationObserver', body);
+  return factory(documentMock, {}, NodeFilter, undefined, opts.MutationObserver);
 }
 
 // Build an element tree by hand (children: strings → text nodes, nodes → appended).
