@@ -114,6 +114,19 @@ function isScriptChar(ch) {
   const c = ch.charCodeAt(0);
   return c === 0xb2 || c === 0xb3 || c === 0xb9 || (c >= 0x2070 && c <= 0x209f);
 }
+// A DERIVATIVE PRIME decorating an identifier: f'(x), x'', θ′ — ASCII apostrophe, the markdown
+// smart quote ’ (renderers emit it for '), and the real primes ′ ″ ‴. Without it the run seeded
+// at "=" started at "(x)" and left "f'" outside the LTR island, so RTL reordered the function
+// name away from its own call (the "result - f'(x) = 12x³ + 10x - 7" report). A prime binds
+// ONLY after a letter-ish base (isPrimeBase): never after a digit — a quote hugging a number
+// ("'15 + 7 = 22'") is a QUOTE, and swallowing it would isolate one quote of the pair — and
+// never after Hebrew/Arabic (the geresh in "הקאץ'" is prose; isTermChar already excludes RTL).
+function isPrime(ch) {
+  return ch === "'" || ch === '’' || ch === '′' || ch === '″' || ch === '‴';
+}
+function isPrimeBase(ch) {
+  return isTermChar(ch) && !isDigitCh(ch);
+}
 // '.'/',' are number-internal separators (3.14, 1,000) — counted ONLY between two digits, so a
 // sentence period ("2.") and a list comma ("x, y") never join an operand. The Arabic-script
 // locales use ٫ (U+066B decimal) and ٬ (U+066C thousands) — without them "٥٫٥ < ٦" isolated
@@ -320,9 +333,15 @@ function relationRuns(text) {
       // it would reverse the words (§3.2 hard rule). Same guard as mathBracketEnd/absSpans.
       if (open < i - 1 && !STRONG_RTL_RE.test(text.slice(open + 1, i - 1))) {
         let s = open;
-        // a leading function-call name (f(x), sin(θ)) OR a script base (x^{2}, a_{ij})
+        // a leading function-call name (f(x), sin(θ)), a primed one (f'(x), f''(x)), OR a
+        // script base (x^{2}, a_{ij})
         for (;;) {
           if (s > 0 && isTermChar(ch(s - 1))) { s -= 1; continue; }
+          if (s > 1 && isPrime(ch(s - 1))) { // a prime RUN must sit on a letter-ish base
+            let q = s - 1;
+            while (q > 0 && isPrime(ch(q - 1))) q -= 1;
+            if (q > 0 && isPrimeBase(ch(q - 1))) { s = q; continue; }
+          }
           if (s > 1 && (ch(s - 1) === '^' || ch(s - 1) === '_') && isTermChar(ch(s - 2))) { s -= 2; continue; }
           break;
         }
@@ -332,6 +351,12 @@ function relationRuns(text) {
     const bodyEnd = i;
     for (;;) {
       if (i > 0 && isTermChar(ch(i - 1))) { i -= 1; continue; }
+      // a derivative-prime run on a letter-ish base is part of the operand: x', f'' (§ isPrime)
+      if (i > 1 && isPrime(ch(i - 1))) {
+        let q = i - 1;
+        while (q > 0 && isPrime(ch(q - 1))) q -= 1;
+        if (q > 0 && isPrimeBase(ch(q - 1))) { i = q; continue; }
+      }
       // a separator joins the number only BETWEEN two digits (3.14, 1,000)
       if (i > 1 && i < bodyEnd && isSep(ch(i - 1)) && isDigitCh(ch(i - 2)) && isDigitCh(ch(i))) {
         i -= 1; continue;
@@ -404,6 +429,10 @@ function relationRuns(text) {
     const body0 = i;
     for (;;) {
       if (i < len && isTermChar(ch(i))) { i += 1; continue; }
+      // a derivative-prime run after a letter-ish base joins the operand: f'(x), x'' (§ isPrime)
+      if (i > body0 && i < len && isPrime(ch(i)) && (isPrimeBase(ch(i - 1)) || isPrime(ch(i - 1)))) {
+        i += 1; continue;
+      }
       if (i > body0 && isSep(ch(i)) && isDigitCh(ch(i - 1)) && i + 1 < len && isDigitCh(ch(i + 1))) {
         i += 1; continue;
       }
@@ -513,7 +542,15 @@ function relationRuns(text) {
       if (e > i) {
         while (e < len && isScriptChar(ch(e))) e += 1; // a trailing power: "(a+b)²", "(1+1/n)ⁿ"
         let s = i;
-        while (s > 0 && isTermChar(ch(s - 1))) s -= 1; // a leading function name: "f(x, y)"
+        for (;;) { // a leading function name, primes included: "f(x, y)", "f'(a, b)"
+          if (s > 0 && isTermChar(ch(s - 1))) { s -= 1; continue; }
+          if (s > 1 && isPrime(ch(s - 1))) {
+            let q = s - 1;
+            while (q > 0 && isPrime(ch(q - 1))) q -= 1;
+            if (q > 0 && isPrimeBase(ch(q - 1))) { s = q; continue; }
+          }
+          break;
+        }
         runs.push([s, e]);
         i = e;
         continue;
