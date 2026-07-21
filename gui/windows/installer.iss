@@ -60,11 +60,12 @@ Source: "{#StageDir}\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdir
 Root: HKCU; Subkey: "Software\ClaudeRTL"; ValueType: none; Flags: uninsdeletekey
 
 [UninstallRun]
-; Runs BEFORE files are deleted (scripts still present). cleanup.ps1 removes the per-user artifacts
-; as the current user, then self-elevates (one UAC) to remove the elevated watcher task + our
-; Trusted-Root cert and restore the Anthropic binaries. RunAsOriginalUser keeps the HKCU pass in the
-; real user's hive; the elevation happens inside the script, not via the (non-elevated) uninstaller.
-Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ""{app}\scripts\cleanup.ps1"""; Flags: runhidden waituntilterminated runasoriginaluser; RunOnceId: "rtlcleanup"
+; Runs BEFORE files are deleted (scripts still present). This is a per-user (PrivilegesRequired=lowest)
+; install, so the uninstaller already runs unelevated as the current user — cleanup.ps1's HKCU pass
+; lands in the right hive, and the script self-elevates (one UAC) for the machine-scope watcher task +
+; Trusted-Root cert + binary restore. (No runasoriginaluser flag: it's a [Run]-only flag, unsupported
+; here, and redundant since the uninstaller isn't elevated to begin with.)
+Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ""{app}\scripts\cleanup.ps1"""; Flags: runhidden waituntilterminated; RunOnceId: "rtlcleanup"
 
 [Icons]
 Name: "{group}\Claude RTL"; Filename: "{app}\{#AppExe}"
