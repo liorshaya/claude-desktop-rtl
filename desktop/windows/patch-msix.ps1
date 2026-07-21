@@ -381,10 +381,16 @@ try {
     $action    = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $arg
     $t1        = New-ScheduledTaskTrigger -AtLogOn
     $t2        = New-ScheduledTaskTrigger -Once -At ((Get-Date).AddMinutes(3)) -RepetitionInterval (New-TimeSpan -Hours 1)
-    $principal = New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType Interactive -RunLevel Highest
+    # S4U ("run whether the user is logged on or not"), NOT Interactive. An Interactive task launches
+    # powershell.exe (a console app) on the user's desktop, so conhost briefly flashes a window BEFORE
+    # -WindowStyle Hidden takes effect - once at logon and every hour. That flash steals foreground
+    # focus (it e.g. drops mouse capture in a fullscreen game). S4U runs the task in the background
+    # session with no desktop, so no window is ever created; it stays elevated via RunLevel Highest,
+    # and only touches files (never needs the interactive desktop). Keep it S4U.
+    $principal = New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType S4U -RunLevel Highest
     $settings  = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
     Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $t1,$t2 -Principal $principal -Settings $settings -Force | Out-Null
-    Log "auto-updater installed (task '$taskName') - re-applies RTL after each Claude update (logon + hourly, elevated, no UAC)."
+    Log "auto-updater installed (task '$taskName') - re-applies RTL after each Claude update (logon + hourly, elevated, background/no window, no UAC)."
     exit 0
   }
 
@@ -392,7 +398,9 @@ try {
     Assert-Admin
     if (Test-AsarPatched $ins.Asar) { exit 0 }   # already patched - nothing to do
     Log "AutoPatch: install is unpatched (an update reverted it) - re-applying RTL + cert-dance..."
-    & powershell -NoProfile -ExecutionPolicy Bypass -File $PSCommandPath
+    # -WindowStyle Hidden so a manual/foreground AutoPatch run never flashes a console window either
+    # (the S4U task already runs windowless; this covers the child + any interactive invocation).
+    & powershell -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File $PSCommandPath
     exit $LASTEXITCODE
   }
 
