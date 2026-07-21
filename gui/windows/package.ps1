@@ -48,7 +48,7 @@ Write-Host ("    ClaudeRtl.exe: {0:N1} MB" -f ((Get-Item (Join-Path $Stage 'Clau
 # --- 2. patch scripts ---
 Step "copying patch scripts"
 $scriptsDst = Join-Path $Stage 'scripts'
-foreach ($f in 'patch-msix.ps1','patch.ps1','preflight.ps1','diagnose.ps1','watch.ps1','inject.mjs') {
+foreach ($f in 'patch-msix.ps1','patch.ps1','cleanup.ps1','preflight.ps1','diagnose.ps1','watch.ps1','inject.mjs') {
     Copy-Item (Join-Path $RepoRoot "desktop\windows\$f") $scriptsDst -Force
 }
 

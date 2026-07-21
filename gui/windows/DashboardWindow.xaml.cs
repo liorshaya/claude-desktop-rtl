@@ -109,6 +109,19 @@ public partial class DashboardWindow : Window
     private void OnStartupToggle(object s, RoutedEventArgs e)
         => _svc.SetStartup(StartupToggle.IsChecked == true);   // HKCU Run key — instant, no admin
 
+    // Hand off to the Inno uninstaller, which runs cleanup.ps1 (task + cert + binary restore + HKCU
+    // keys) before removing the app. We don't tear down here — one flow, so nothing is half-removed.
+    private void OnUninstall(object s, RoutedEventArgs e)
+    {
+        if (_busy) return;
+        var r = MessageBox.Show(
+            "Remove Claude RTL completely?\n\nThis restores Claude's original files, removes the auto-update task and the self-signed certificate we added to Trusted Root, then uninstalls this app. You'll be asked to approve an admin prompt during removal.",
+            "Remove Claude RTL", MessageBoxButton.OKCancel, MessageBoxImage.Warning);
+        if (r != MessageBoxResult.OK) return;
+        if (_svc.LaunchUninstaller()) Application.Current.Shutdown();   // uninstaller + cleanup take over
+        else Open("ms-settings:appsfeatures");                          // fallback: Windows Apps settings
+    }
+
     private async void OnToggle(object s, RoutedEventArgs e)
     {
         // The click already flipped the checkbox visually; if the operation is refused
