@@ -60,6 +60,25 @@ patched?" read-only, so it never disturbs a running, patched Claude; if a fresh 
 running, it defers and RTL applies on the next launch. Updates stay fully automatic — you run
 nothing by hand. Logs: `%LOCALAPPDATA%\claude-rtl\watch.log`.
 
+## Uninstalling / full cleanup
+
+Removing the app (or running `patch-msix.ps1 -Cleanup`) reverses everything install created — the
+elevated `ClaudeRtlMsixWatcher` scheduled task, our self-signed cert in Trusted Root, the re-signed
+Anthropic binaries, and the HKCU autostart keys. The installer's uninstaller does this automatically.
+
+If a machine was left with orphaned artifacts (e.g. the app folder was deleted before uninstalling —
+a failed elevated task still firing hourly), run the standalone cleanup from an **elevated**
+PowerShell; it works even after the app and Claude are gone:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\desktop\windows\cleanup.ps1
+```
+
+It removes the watcher task + Trusted-Root cert, restores any backed-up binaries, kills the resident
+Squirrel watcher, and deletes `HKCU\Software\ClaudeRTL` + the `Run` autostarts. Every step is
+best-effort. To remove just the watcher task by hand: `Unregister-ScheduledTask ClaudeRtlMsixWatcher`
+(elevated).
+
 ## The one-click app
 
 Most users don't need the scripts above. The **`ClaudeRTL-Setup.exe`** installer ships a WPF tray

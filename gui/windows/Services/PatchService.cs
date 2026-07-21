@@ -176,6 +176,25 @@ public sealed class PatchService
         catch { }
     }
 
+    // --- full removal: hand off to the Inno uninstaller, which runs cleanup.ps1 (elevated watcher
+    //     task + Trusted-Root cert + binary restore + HKCU keys) via its [UninstallRun] step. ---
+    // Per-user Inno uninstall key; the AppId matches installer.iss.
+    const string UninstallKey =
+        @"Software\Microsoft\Windows\CurrentVersion\Uninstall\{7C9F3E2A-5B4D-4A1E-9C8F-2D6E1B0A3F45}_is1";
+
+    public bool LaunchUninstaller()
+    {
+        string? cmd;
+        try { using var k = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(UninstallKey); cmd = k?.GetValue("UninstallString") as string; }
+        catch { return false; }
+        if (string.IsNullOrWhiteSpace(cmd)) return false;
+        // UninstallString is a quoted exe path (Inno may append args) — extract just the exe.
+        var path = cmd.Trim();
+        if (path.StartsWith("\"")) { var end = path.IndexOf('"', 1); if (end > 0) path = path.Substring(1, end - 1); }
+        try { Process.Start(new ProcessStartInfo(path) { UseShellExecute = true }); return true; }
+        catch { return false; }
+    }
+
     // --- update check (GitHub Releases API; user-initiated, GET-only, the one network call) ---
     const string Repo = "liorshaya/claude-desktop-rtl";
     public string AppVersion =>

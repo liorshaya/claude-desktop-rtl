@@ -61,7 +61,10 @@
           <CheckBox x:Name="AutoToggle" Margin="3,9,0,0" FontSize="12.5" Foreground="{StaticResource Ink}"
                     Content="Keep RTL after Claude updates" Click="OnToggle" />
           <TextBlock x:Name="BusyText" Margin="3,9,0,0" FontSize="11.5" Foreground="{StaticResource Brand}" Visibility="Collapsed" Text="Working…" />
-          <Button HorizontalAlignment="Left" Style="{StaticResource GhostButton}" Margin="0,9,0,0" Content="Restore original" Click="OnRestore" />
+          <StackPanel Orientation="Horizontal" Margin="0,9,0,0">
+            <Button Style="{StaticResource GhostButton}" Content="Restore original" Click="OnRestore" />
+            <Button x:Name="UninstallBtn" Style="{StaticResource GhostButton}" Margin="10,0,0,0" Content="Remove completely" Click="OnUninstall" />
+          </StackPanel>
         </StackPanel>
       </Border>
 

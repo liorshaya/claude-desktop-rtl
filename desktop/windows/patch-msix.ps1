@@ -30,6 +30,7 @@ param(
   [switch]$Verify,    # read-only: confirm the full RTL + cert-dance patch is in place
   [switch]$Watch,     # install the auto-updater (re-applies RTL after each Claude update)
   [switch]$Unwatch,   # remove the auto-updater
+  [switch]$Cleanup,   # full uninstall teardown: remove task + cert + restore binaries (best-effort)
   [switch]$AutoPatch, # internal (scheduled task): re-apply only if an update reverted the patch
   [switch]$Force      # stop a running Claude / cowork-svc without an extra notice
 )
@@ -295,6 +296,45 @@ function Invoke-CertDance($exe, $coworkSvc) {
 }
 
 try {
+  # --- teardown paths run BEFORE Get-Msix ---
+  # Get-Msix Dies when the MSIX Claude package is absent, so anything gated behind it becomes
+  # unreachable once Claude itself has been uninstalled. Removing the elevated watcher task and our
+  # Trusted-Root cert needs the task name / friendly-name ONLY - not a live install - so handle them
+  # here first (mirrors patch.ps1, which resolves -Watch/-Unwatch before Get-Install). Without this,
+  # an uninstall-time cleanup can never clear the orphaned elevated task after Claude is gone.
+  if ($Unwatch) {
+    Assert-Admin
+    Unregister-ScheduledTask -TaskName 'ClaudeRtlMsixWatcher' -Confirm:$false -ErrorAction SilentlyContinue
+    Log "auto-updater removed."
+    exit 0
+  }
+
+  if ($Cleanup) {
+    Assert-Admin
+    # Reverse everything install created that outlives the app, most importantly so no failed
+    # elevated task keeps firing hourly and no machine-trusted self-signed cert lingers. Each step
+    # is best-effort and independent: the task + cert do NOT need a live Claude, and the binary
+    # restore is attempted only if the MSIX package (and its .crtl-bak backups) are still present.
+    Unregister-ScheduledTask -TaskName 'ClaudeRtlMsixWatcher' -Confirm:$false -ErrorAction SilentlyContinue
+    Log "watcher task removed."
+    $ins = try { Get-Msix } catch { $null }
+    if ($ins) {
+      $exeBak = "$($ins.Exe).crtl-bak"; $asarBak = "$($ins.Asar).crtl-bak"; $svcBak = "$($ins.CoworkSvc).crtl-bak"
+      if ((Test-Path $exeBak) -or (Test-Path $asarBak) -or (Test-Path $svcBak)) {
+        Stop-Claude; Stop-Cowork; Grant-Write $ins.App
+        if (Test-Path $asarBak) { Copy-Item $asarBak $ins.Asar -Force; Log "restored app.asar." }
+        if (Test-Path $exeBak)  { Copy-Item $exeBak  $ins.Exe  -Force; Log "restored Claude.exe (original signature + fuse)." }
+        if (Test-Path $svcBak)  { Copy-Item $svcBak  $ins.CoworkSvc -Force; Log "restored cowork-svc.exe (original Anthropic cert)." }
+        Start-Cowork
+      } else { Log "no .crtl-bak backups under $($ins.App) - skipping binary restore." }
+    } else {
+      Log "MSIX Claude package absent - skipping binary restore (task + cert still cleaned)."
+    }
+    Remove-RtlCerts
+    Log "cleanup complete - task + cert removed$(if($ins){' and binaries reverted'})."
+    exit 0
+  }
+
   $ins = Get-Msix
 
   if ($Status) {
@@ -341,17 +381,16 @@ try {
     $action    = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $arg
     $t1        = New-ScheduledTaskTrigger -AtLogOn
     $t2        = New-ScheduledTaskTrigger -Once -At ((Get-Date).AddMinutes(3)) -RepetitionInterval (New-TimeSpan -Hours 1)
-    $principal = New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType Interactive -RunLevel Highest
+    # S4U ("run whether the user is logged on or not"), NOT Interactive. An Interactive task launches
+    # powershell.exe (a console app) on the user's desktop, so conhost briefly flashes a window BEFORE
+    # -WindowStyle Hidden takes effect - once at logon and every hour. That flash steals foreground
+    # focus (it e.g. drops mouse capture in a fullscreen game). S4U runs the task in the background
+    # session with no desktop, so no window is ever created; it stays elevated via RunLevel Highest,
+    # and only touches files (never needs the interactive desktop). Keep it S4U.
+    $principal = New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType S4U -RunLevel Highest
     $settings  = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
     Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $t1,$t2 -Principal $principal -Settings $settings -Force | Out-Null
-    Log "auto-updater installed (task '$taskName') - re-applies RTL after each Claude update (logon + hourly, elevated, no UAC)."
-    exit 0
-  }
-
-  if ($Unwatch) {
-    Assert-Admin
-    Unregister-ScheduledTask -TaskName 'ClaudeRtlMsixWatcher' -Confirm:$false -ErrorAction SilentlyContinue
-    Log "auto-updater removed."
+    Log "auto-updater installed (task '$taskName') - re-applies RTL after each Claude update (logon + hourly, elevated, background/no window, no UAC)."
     exit 0
   }
 
@@ -359,7 +398,9 @@ try {
     Assert-Admin
     if (Test-AsarPatched $ins.Asar) { exit 0 }   # already patched - nothing to do
     Log "AutoPatch: install is unpatched (an update reverted it) - re-applying RTL + cert-dance..."
-    & powershell -NoProfile -ExecutionPolicy Bypass -File $PSCommandPath
+    # -WindowStyle Hidden so a manual/foreground AutoPatch run never flashes a console window either
+    # (the S4U task already runs windowless; this covers the child + any interactive invocation).
+    & powershell -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File $PSCommandPath
     exit $LASTEXITCODE
   }
 

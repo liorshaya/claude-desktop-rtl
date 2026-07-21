@@ -52,6 +52,20 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; Flags: unchecked
 [Files]
 Source: "{#StageDir}\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
 
+[Registry]
+; Create our onboarding key at install so uninstall can remove it (with the runtime "Onboarded"
+; value inside) as the current user, no elevation. The HKCU Run autostart VALUES (ClaudeRTL,
+; ClaudeRtlWatcher) can't be handled here: uninsdeletevalue needs a value created at install with a
+; real ValueType, and ValueType:none ignores ValueName — so cleanup.ps1 ([UninstallRun]) removes them.
+Root: HKCU; Subkey: "Software\ClaudeRTL"; ValueType: none; Flags: uninsdeletekey
+
+[UninstallRun]
+; Runs BEFORE files are deleted (scripts still present). cleanup.ps1 removes the per-user artifacts
+; as the current user, then self-elevates (one UAC) to remove the elevated watcher task + our
+; Trusted-Root cert and restore the Anthropic binaries. RunAsOriginalUser keeps the HKCU pass in the
+; real user's hive; the elevation happens inside the script, not via the (non-elevated) uninstaller.
+Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ""{app}\scripts\cleanup.ps1"""; Flags: runhidden waituntilterminated runasoriginaluser; RunOnceId: "rtlcleanup"
+
 [Icons]
 Name: "{group}\Claude RTL"; Filename: "{app}\{#AppExe}"
 Name: "{group}\Uninstall Claude RTL"; Filename: "{uninstallexe}"
@@ -60,5 +74,6 @@ Name: "{userdesktop}\Claude RTL"; Filename: "{app}\{#AppExe}"; Tasks: desktopico
 [Run]
 Filename: "{app}\{#AppExe}"; Description: "Launch Claude RTL now"; Flags: nowait postinstall skipifsilent
 
-; Note: uninstalling only removes this manager app. The RTL patch is baked into Claude's own files
-; and keeps working. To fully revert, click "Restore original" in the app before uninstalling.
+; Note: uninstalling now also runs cleanup.ps1 (see [UninstallRun]) - it removes the elevated
+; watcher task, our Trusted-Root cert, the HKCU autostarts, and restores Claude's original files.
+; The elevated teardown prompts for admin once; decline it and the RTL patch simply stays in place.
