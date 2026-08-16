@@ -23,9 +23,15 @@ PAYLOAD="${CLAUDE_RTL_PAYLOAD:-$REPO_ROOT/dist/payload.js}"
 HELPER="${CLAUDE_RTL_HELPER:-}"
 MARKER="claude-rtl-payload-v1"        # build-payload.js stamps this into the IIFE
 UIDIR_MARKER="claude-rtl-uidir"       # marks the main-entry switch (idempotency)
-# Native code can't be loaded from inside an asar, so these stay unpacked (must match the
-# original set: *.node, *.dylib, spawn-helper). Verified against the copy after packing.
-UNPACK_GLOB="{**/*.node,**/*.dylib,**/spawn-helper}"
+# Native code can't be loaded from inside an asar, so every binary the original ships
+# UNPACKED must stay unpacked. The set is DERIVED from the original's app.asar.unpacked at
+# patch time (build_unpack_glob): a hardcoded extension list silently swallows anything
+# Anthropic adds later — v1.30096.5 introduced resources/github-mcp/github-mcp-server, a
+# plain 39.8MB executable matching none of *.node / *.dylib / spawn-helper, which the old
+# glob packed INSIDE the asar (where it can never be exec'd). Fallback only if that dir is
+# missing. Verified against the original after packing.
+UNPACK_GLOB_FALLBACK="**/*.node,**/*.dylib,**/spawn-helper"
+UNPACK_GLOB=""                        # set by build_unpack_glob() during install
 
 # Auto-reapply watcher (§10).
 WATCH_LABEL="com.claude-rtl.watcher"
@@ -33,10 +39,30 @@ WATCH_PLIST_SRC="$SCRIPT_DIR/agent.plist"
 WATCH_PLIST_DST="$HOME/Library/LaunchAgents/$WATCH_LABEL.plist"
 WATCH_LOG="$HOME/Library/Logs/claude-rtl-watch.log"
 
+# The patched bundle is built at STAGE_APP and only swapped into DEST_APP once it is
+# complete AND its signature verifies. An aborted patch must never leave a half-built bundle
+# at DEST_APP: Anthropic's original signature over modified contents makes the bundle
+# unlaunchable (launchd: RBSRequestErrorDomain 5 / POSIX 163 "Launchd job spawn failed"),
+# which is far worse than simply staying on the previous version. BACKUP_APP holds the old
+# copy for the instant between the two renames, so a late failure can still roll back.
+# Both are dot-prefixed so Finder/LaunchServices ignore them mid-build.
+DEST_DIR="$(dirname "$DEST_APP")"
+DEST_NAME="$(basename "$DEST_APP")"
+STAGE_APP="$DEST_DIR/.${DEST_NAME%.app}.staging.app"
+BACKUP_APP="$DEST_DIR/.${DEST_NAME%.app}.previous.app"
+
 WORK=""
 die() { echo "patch: ERROR — $*" >&2; exit 1; }
 log() { echo "patch: $*"; }
-cleanup() { [ -n "$WORK" ] && rm -rf "$WORK"; return 0; }
+cleanup() {
+  if [ -n "$WORK" ]; then rm -rf "$WORK"; fi
+  rm -rf "$STAGE_APP"
+  # Killed between "move the old app aside" and "put the new one in place"? Put it back.
+  if [ -d "$BACKUP_APP" ]; then
+    if [ -d "$DEST_APP" ]; then rm -rf "$BACKUP_APP"; else mv "$BACKUP_APP" "$DEST_APP"; fi
+  fi
+  return 0
+}
 trap cleanup EXIT
 
 app_version() { /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$1/Contents/Info.plist" 2>/dev/null || echo "?"; }
@@ -45,6 +71,47 @@ app_version() { /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "
 asar_extract() { if [ -n "$HELPER" ]; then "$HELPER" extract "$1" "$2"; else npx --yes @electron/asar extract "$1" "$2"; fi; }
 asar_pack()    { if [ -n "$HELPER" ]; then "$HELPER" pack "$1" "$2" "$UNPACK_GLOB"; else npx --yes @electron/asar pack "$1" "$2" --unpack "$UNPACK_GLOB"; fi; }
 fuses_off()    { if [ -n "$HELPER" ]; then "$HELPER" fuses "$1" EnableEmbeddedAsarIntegrityValidation=off; else npx --yes @electron/fuses write --app "$1" EnableEmbeddedAsarIntegrityValidation=off >/dev/null; fi; }
+
+# Build the asar --unpack glob from the binaries the ORIGINAL keeps unpacked, so a native
+# file added in a future Claude version can't quietly end up inside the archive. Files with
+# an extension collapse to one "**/*.ext" pattern; extensionless ones match by name.
+build_unpack_glob() {                 # sets UNPACK_GLOB
+  local dir="$1" pats="" f base pat
+  if [ ! -d "$dir" ]; then
+    UNPACK_GLOB="{$UNPACK_GLOB_FALLBACK}"
+    log "WARNING: $dir missing — falling back to the built-in unpack glob."
+    return 0
+  fi
+  while IFS= read -r f; do
+    base="${f##*/}"
+    # A brace or comma in a name would corrupt the brace-expansion list we hand to asar.
+    case "$base" in *[,{}]*) die "unpacked binary '$base' contains , { or } — cannot build an unpack glob." ;; esac
+    case "$base" in
+      *.*) pat="**/*.${base##*.}" ;;
+      *)   pat="**/$base" ;;
+    esac
+    case ",$pats," in *",$pat,"*) ;; *) pats="${pats:+$pats,}$pat" ;; esac
+  done < <(find "$dir" -type f)
+  [ -n "$pats" ] || pats="$UNPACK_GLOB_FALLBACK"
+  UNPACK_GLOB="{$pats}"
+}
+
+# Number of entries an asar header marks "unpacked". Header layout: four LE uint32s, the
+# 4th (offset 12) being the JSON length, with the JSON itself starting at offset 16.
+# Comparing this count against the original's is what catches a binary silently swallowed
+# into the archive — the file still exists in app.asar.unpacked either way, so a
+# presence check alone proves nothing.
+asar_unpacked_count() {
+  local a="$1" jlen
+  [ -s "$a" ] || { echo -1; return 0; }
+  jlen="$(od -An -tu4 -j12 -N4 "$a" 2>/dev/null | tr -d ' ' || true)"
+  case "$jlen" in ''|*[!0-9]*) echo -1; return 0 ;; esac
+  head -c "$((16 + jlen))" "$a" | tail -c "$jlen" \
+    | grep -o '"unpacked":true' | wc -l | tr -d ' ' || true
+}
+
+# Count occurrences (not lines) of a literal in a possibly-binary file.
+count_occurrences() { LC_ALL=C grep -o -a -F "$1" "$2" | wc -l | tr -d ' ' || true; }
 
 # Quit a running app by its EXACT bundle path (so we never touch the other Claude). Used
 # before uninstall (else the process lingers in the Dock) and before re-patch (else we
@@ -67,6 +134,9 @@ cmd_status() {
 
 cmd_uninstall() {
   quit_app_at "$DEST_APP"   # close the running copy first, else it lingers in the Dock
+  # Drop any staging/backup leftovers first, so cleanup() cannot "restore" one over the
+  # removal we are about to perform.
+  rm -rf "$STAGE_APP" "$BACKUP_APP"
   if [ -d "$DEST_APP" ]; then
     rm -rf "$DEST_APP"
     log "removed $DEST_APP (original untouched)."
@@ -136,17 +206,23 @@ cmd_install() {
   [ -f "$PAYLOAD" ] || die "payload not found at $PAYLOAD."
   grep -q "$MARKER" "$PAYLOAD" || die "payload missing marker $MARKER — build looks wrong."
 
-  log "copying $ORIG_APP → $DEST_APP (original is never modified)…"
-  quit_app_at "$DEST_APP"   # never rm -rf a running bundle (an update would corrupt it)
-  rm -rf "$DEST_APP"
-  cp -R "$ORIG_APP" "$DEST_APP"
+  log "copying $ORIG_APP → staging (original is never modified)…"
+  mkdir -p "$DEST_DIR"
+  rm -rf "$STAGE_APP"
+  cp -R "$ORIG_APP" "$STAGE_APP"
 
-  /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName Claude-RTL" "$DEST_APP/Contents/Info.plist" 2>/dev/null \
-    || /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string Claude-RTL" "$DEST_APP/Contents/Info.plist"
+  /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName Claude-RTL" "$STAGE_APP/Contents/Info.plist" 2>/dev/null \
+    || /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string Claude-RTL" "$STAGE_APP/Contents/Info.plist"
 
-  local ASAR="$DEST_APP/Contents/Resources/app.asar"
-  local ORIG_UNPACKED="$DEST_APP/Contents/Resources/app.asar.unpacked"
+  local ASAR="$STAGE_APP/Contents/Resources/app.asar"
+  local ORIG_ASAR="$ORIG_APP/Contents/Resources/app.asar"
+  # Reference the ORIGINAL, not the copy: the old code pointed both sides of the post-repack
+  # check at the same directory, so it compared the copy against itself and always passed.
+  local ORIG_UNPACKED="$ORIG_APP/Contents/Resources/app.asar.unpacked"
   WORK="$(mktemp -d)"
+
+  build_unpack_glob "$ORIG_UNPACKED"
+  log "unpack glob (derived from the original): $UNPACK_GLOB"
 
   log "extracting app.asar…"
   asar_extract "$ASAR" "$WORK/app"
@@ -187,17 +263,51 @@ cmd_install() {
   rm -f "$ASAR"
   asar_pack "$WORK/app" "$ASAR"
 
-  # Safety net: every file the original kept unpacked must still be unpacked.
+  # --- Safety nets: a repack can fail in ways that still look like success ---
+
+  # 1) It can produce nothing at all and still exit 0 (observed after the v1.30096.5 update:
+  #    app.asar was simply absent, and every downstream check passed regardless).
+  [ -s "$ASAR" ] || die "repack produced no app.asar — aborting."
+
+  # 2) Every payload we injected must actually be inside the archive.
+  local per want_markers got_markers
+  per="$(count_occurrences "$MARKER" "$PAYLOAD")"
+  want_markers=$(( (injected + skipped) * per ))
+  got_markers="$(count_occurrences "$MARKER" "$ASAR")"
+  [ "${got_markers:-0}" -ge "$want_markers" ] \
+    || die "repacked app.asar carries $got_markers payload marker(s), expected $want_markers — repack is incomplete."
+
+  # 3) Every file the original keeps unpacked must still EXIST unpacked…
   if [ -d "$ORIG_UNPACKED" ]; then
     local missing
     missing="$(cd "$ORIG_UNPACKED" && find . -type f | while read -r rel; do
-      [ -e "$DEST_APP/Contents/Resources/app.asar.unpacked/$rel" ] || echo "$rel"; done)"
+      [ -e "$STAGE_APP/Contents/Resources/app.asar.unpacked/$rel" ] || echo "$rel"; done)"
     [ -z "$missing" ] || die "repack dropped unpacked binaries:\n$missing"
   fi
 
+  # 4) …AND still be MARKED unpacked in the header. (3) alone cannot catch this: the file
+  #    survives on disk because it was cp'd from the original, while the header now points
+  #    inside the archive — which is how github-mcp-server broke without any error.
+  local want_unpacked got_unpacked
+  want_unpacked="$(asar_unpacked_count "$ORIG_ASAR")"
+  got_unpacked="$(asar_unpacked_count "$ASAR")"
+  if [ "$want_unpacked" -ge 0 ] && [ "$got_unpacked" != "$want_unpacked" ]; then
+    die "repack marks $got_unpacked file(s) unpacked but the original marks $want_unpacked — a native binary was packed INSIDE the asar and could never be exec'd. Unpack glob was: $UNPACK_GLOB"
+  fi
+  log "repack verified ($got_markers payload marker(s), $got_unpacked unpacked binaries)."
+
   # --- Flip the asar-integrity fuse (our asar differs from the signed manifest) ---
+  # Retried: this step writes into the Electron Framework binary and is the one that fails
+  # transiently right after a Claude update (EPERM while the freshly-swapped original is
+  # still being launched/finalised). One retry loop turns a lost update into a short wait.
   log "writing fuses (EnableEmbeddedAsarIntegrityValidation=off)…"
-  fuses_off "$DEST_APP"
+  local attempt out
+  for attempt in 1 2 3 4 5; do
+    if out="$(fuses_off "$STAGE_APP" 2>&1)"; then break; fi
+    [ "$attempt" -lt 5 ] || die "fuses failed after $attempt attempts: $out"
+    log "  attempt $attempt failed ($out) — retrying in $((attempt * 3))s…"
+    sleep "$((attempt * 3))"
+  done
 
   # --- Ad-hoc re-sign, PRESERVING entitlements minus the team-id-coupled keys ---
   log "re-signing (ad-hoc, preserving entitlements)…"
@@ -206,10 +316,25 @@ cmd_install() {
   for key in com.apple.application-identifier com.apple.developer.team-identifier keychain-access-groups; do
     /usr/libexec/PlistBuddy -c "Delete :$key" "$ENT" 2>/dev/null || true
   done
-  codesign --force --deep --sign - --entitlements "$ENT" "$DEST_APP" 2>&1 | sed 's/^/patch:   codesign: /' || die "codesign failed."
+  codesign --force --deep --sign - --entitlements "$ENT" "$STAGE_APP" 2>&1 | sed 's/^/patch:   codesign: /' || die "codesign failed."
 
+  # A HARD gate, not a warning. An unsigned/stale-signed bundle is precisely what makes
+  # launchd refuse to spawn the app, so it must never reach DEST_APP.
   log "verifying signature…"
-  codesign --verify --deep --strict "$DEST_APP" 2>&1 | sed 's/^/patch:   /' || log "note: --strict verify warned (ad-hoc); launch test is the real check."
+  codesign --verify --strict "$STAGE_APP" 2>&1 | sed 's/^/patch:   /' \
+    || die "the freshly signed bundle does not verify — refusing to install it."
+
+  # --- Atomic install: only now does the live app get replaced ---
+  quit_app_at "$DEST_APP"   # never rm -rf a running bundle
+  rm -rf "$BACKUP_APP"
+  if [ -d "$DEST_APP" ]; then mv "$DEST_APP" "$BACKUP_APP"; fi
+  mv "$STAGE_APP" "$DEST_APP"
+  if ! codesign --verify --strict "$DEST_APP" >/dev/null 2>&1; then
+    rm -rf "$DEST_APP"
+    if [ -d "$BACKUP_APP" ]; then mv "$BACKUP_APP" "$DEST_APP"; fi
+    die "the installed bundle failed verification — rolled back to the previous copy."
+  fi
+  rm -rf "$BACKUP_APP"
 
   log "DONE → $DEST_APP"
   log "launch it, confirm RTL + that Cowork works. First launch may show a blank window once — quit & reopen."
